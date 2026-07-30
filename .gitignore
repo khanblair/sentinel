@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+out/
+release/
+build/
+*.tsbuildinfo
+
+# Prisma / SQLite
+apps/backend/prisma/*.db
+apps/backend/prisma/*.db-journal
+*.db
+*.db-journal
+
+# Playwright
+playwright-report/
+test-results/
+apps/backend/playwright/.cache/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Testing / coverage
+coverage/
