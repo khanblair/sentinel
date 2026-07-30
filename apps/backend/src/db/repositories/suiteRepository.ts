@@ -35,7 +35,7 @@ export class SuiteRepository {
         projectId,
         archivedAt: options.includeArchived ? undefined : null,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
   }
 

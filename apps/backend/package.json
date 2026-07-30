@@ -10,6 +10,7 @@
     "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --ext .ts",
     "test": "rm -f prisma/test.db && DATABASE_URL=\"file:./prisma/test.db\" prisma migrate deploy && DATABASE_URL=\"file:./prisma/test.db\" vitest run",
+    "test:e2e": "playwright install --with-deps chromium && vitest run -c vitest.e2e.config.ts",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate"
   },
@@ -21,6 +22,7 @@
     "@sentinel/shared": "workspace:*",
     "ai": "^4.0.18",
     "fastify": "^4.28.1",
+    "playwright": "^1.48.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },

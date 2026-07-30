@@ -45,7 +45,10 @@ export class EnvironmentRepository {
   }
 
   async listByProject(projectId: string): Promise<Environment[]> {
-    return this.prisma.environment.findMany({ where: { projectId }, orderBy: { createdAt: "desc" } });
+    return this.prisma.environment.findMany({
+      where: { projectId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
   }
 
   async getById(id: string): Promise<Environment> {

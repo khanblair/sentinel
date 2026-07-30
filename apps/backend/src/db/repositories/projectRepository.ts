@@ -26,7 +26,9 @@ export class ProjectRepository {
   }
 
   async list(): Promise<Project[]> {
-    return this.prisma.project.findMany({ orderBy: { createdAt: "desc" } });
+    // Secondary sort on id (cuid, monotonic within this process) so two rows created
+    // within the same millisecond still return in a stable, deterministic order.
+    return this.prisma.project.findMany({ orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
   }
 
   async getById(id: string): Promise<Project> {

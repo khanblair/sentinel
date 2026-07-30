@@ -72,7 +72,7 @@ export class TestCaseRepository {
   async listBySuite(suiteId: string, options: { includeArchived?: boolean } = {}): Promise<TestCaseView[]> {
     const testCases = await this.prisma.testCase.findMany({
       where: { suiteId, archivedAt: options.includeArchived ? undefined : null },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     return testCases.map(toView);
   }

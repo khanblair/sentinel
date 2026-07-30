@@ -3,7 +3,13 @@ import { NotFoundError, ValidationError } from "../../errors.js";
 import { decrypt, encrypt } from "../../security/encryption.js";
 import type { Provider } from "@sentinel/shared";
 
-const KNOWN_PROVIDERS: readonly Provider[] = ["claude", "deepseek", "gemini", "openai", "openrouter"];
+const KNOWN_PROVIDERS: ReadonlySet<Provider> = new Set([
+  "claude",
+  "deepseek",
+  "gemini",
+  "openai",
+  "openrouter",
+]);
 
 export interface ProviderConfigSummary {
   id: string;
@@ -26,7 +32,7 @@ export class ProviderConfigRepository {
 
   /** Never returns the decrypted key — safe to expose over HTTP. */
   async create(input: CreateProviderConfigInput): Promise<ProviderConfigSummary> {
-    if (!KNOWN_PROVIDERS.includes(input.provider)) {
+    if (!KNOWN_PROVIDERS.has(input.provider)) {
       throw new ValidationError(`Unknown provider "${input.provider}"`);
     }
     if (!input.apiKey.trim()) {
@@ -44,7 +50,9 @@ export class ProviderConfigRepository {
   }
 
   async list(): Promise<ProviderConfigSummary[]> {
-    const rows = await this.prisma.providerConfig.findMany({ orderBy: { createdAt: "desc" } });
+    const rows = await this.prisma.providerConfig.findMany({
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
     return rows.map((row) => ({
       id: row.id,
       provider: row.provider as Provider,
