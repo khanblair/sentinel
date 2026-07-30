@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Environment, Run, RunMode, StepLog, Suite, TestCase } from "@sentinel/shared";
-import { api, type ProviderConfigSummary } from "../api/client";
+import { api, type AssistantSummary, type ProviderConfigSummary } from "../api/client";
 import { RunTicker, type PendingPrompt } from "../components/RunTicker";
 
 export interface SuiteDetailViewProps {
@@ -25,6 +25,7 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfigSummary[]>([]);
+  const [assistants, setAssistants] = useState<AssistantSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
@@ -40,14 +41,16 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
 
   async function refresh(): Promise<void> {
     try {
-      const [cases, envs, providers] = await Promise.all([
+      const [cases, envs, providers, assistantList] = await Promise.all([
         api.testCases.listBySuite(suite.id),
         api.environments.listByProject(suite.projectId),
         api.providerConfigs.list(),
+        api.assistants.list(),
       ]);
       setTestCases(cases);
       setEnvironments(envs);
       setProviderConfigs(providers);
+      setAssistants(assistantList);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -128,12 +131,14 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
 
       <h3>Run this suite</h3>
       <div>
-        <input
-          value={assistantId}
-          onChange={(e) => setAssistantId(e.target.value)}
-          placeholder="Assistant id"
-          aria-label="Assistant id"
-        />
+        <select value={assistantId} onChange={(e) => setAssistantId(e.target.value)} aria-label="Assistant">
+          <option value="">Select an assistant…</option>
+          {assistants.map((assistant) => (
+            <option key={assistant.id} value={assistant.id}>
+              {assistant.name}
+            </option>
+          ))}
+        </select>
         <select value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} aria-label="Environment">
           <option value="">No environment</option>
           {environments.map((env) => (

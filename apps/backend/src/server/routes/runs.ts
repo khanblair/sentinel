@@ -6,6 +6,7 @@ import type { ServerMessage } from "@sentinel/shared";
 import { createPlaywrightPageFactory } from "../../automation/browserManager.js";
 import type { ProviderConfigRepository } from "../../db/repositories/providerConfigRepository.js";
 import { createInteractiveResolver, fullAutoResolver } from "../../executionLoop/confirmation.js";
+import { createWsRunPauseResolver } from "../../metacognition/runPause.js";
 import { runSuite } from "../../orchestrator/runSuite.js";
 import { createProviderAdapter } from "../../providers/aiSdkProvider.js";
 import type { WsPromptBroker } from "../../ws/promptBroker.js";
@@ -46,10 +47,13 @@ export function registerRunRoutes(app: FastifyInstance, deps: RunRouteDeps): voi
       );
       const provider = createProviderAdapter(providerName, apiKey, parsed.data.model);
       const runId = randomUUID();
-      const resolveConfirmation =
-        parsed.data.mode === "full_auto"
-          ? fullAutoResolver
-          : createInteractiveResolver(deps.promptBroker, runId);
+      const isInteractive = parsed.data.mode === "interactive";
+      const resolveConfirmation = isInteractive
+        ? createInteractiveResolver(deps.promptBroker, runId)
+        : fullAutoResolver;
+      const resolveRunPause = isInteractive
+        ? createWsRunPauseResolver(deps.promptBroker, runId)
+        : undefined;
 
       void runSuite({
         prisma: deps.prisma,
@@ -60,6 +64,7 @@ export function registerRunRoutes(app: FastifyInstance, deps: RunRouteDeps): voi
         provider,
         pageFactory: createPlaywrightPageFactory(),
         resolveConfirmation,
+        resolveRunPause,
         broadcast: deps.broadcast,
         runId,
       }).catch((error: unknown) => {

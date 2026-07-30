@@ -1,6 +1,7 @@
 import { WebSocketServer } from "ws";
 import type { ServerMessage } from "@sentinel/shared";
 import { createPrismaClient } from "../db/client.js";
+import { seedBuiltInAssistants } from "../db/seedAssistants.js";
 import { loadOrCreateEncryptionKey } from "../security/encryption.js";
 import { attachConnectionHandler, broadcast as broadcastToClients } from "../ws/index.js";
 import { WsPromptBroker } from "../ws/promptBroker.js";
@@ -12,6 +13,7 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 async function main(): Promise<void> {
   const prisma = createPrismaClient();
   const encryptionKey = loadOrCreateEncryptionKey();
+  await seedBuiltInAssistants(prisma);
 
   // The WebSocketServer can't be constructed until after `app.listen()` gives us
   // `app.server`, but routes need a `broadcast` function to close over *before*
@@ -46,7 +48,9 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
-main().catch((error: unknown) => {
+try {
+  await main();
+} catch (error) {
   console.error("fatal startup error", error);
   process.exit(1);
-});
+}

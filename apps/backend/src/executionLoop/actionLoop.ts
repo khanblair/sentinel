@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { StepVerdict } from "@sentinel/shared";
 import type { Page } from "../automation/page.js";
 import { executeTool, isConfirmationToolCall, toolCallSchema, type ToolCall } from "../automation/tools.js";
-import type { ProviderAdapter } from "../providers/types.js";
+import type { ProviderAdapter, TokenUsage } from "../providers/types.js";
 import type { ConfirmationResolver } from "./confirmation.js";
 import { isRepeating, type TurnRecord } from "./stuckDetection.js";
 
@@ -15,6 +15,9 @@ export interface StepResult {
   confidence: number;
   confidenceReason: string;
   turns: TurnRecord[];
+  /** Summed across every generateObject call this step made — the only place this
+   * data exists before it's lost, so runSuite can persist it as ProviderUsage. */
+  usage: TokenUsage;
 }
 
 export interface RunStepOptions {
@@ -40,9 +43,10 @@ export interface RunStepOptions {
 export async function runStep(options: RunStepOptions): Promise<StepResult> {
   const turnBudget = options.turnBudget ?? DEFAULT_TURN_BUDGET;
   const history: TurnRecord[] = [];
+  const usage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
 
   for (let turn = 0; turn < turnBudget; turn += 1) {
-    const { object } = await options.provider.generateObject({
+    const { object, usage: turnUsage } = await options.provider.generateObject({
       systemPrompt:
         "You are executing one checklist step in a browser test via tool calls. Decide the single " +
         "next tool call. Before calling assert_condition, explicitly cite the evidence you actually " +
@@ -50,6 +54,8 @@ export async function runStep(options: RunStepOptions): Promise<StepResult> {
       prompt: buildPrompt(options.instruction, history),
       schema: nextActionSchema,
     });
+    usage.promptTokens += turnUsage.promptTokens;
+    usage.completionTokens += turnUsage.completionTokens;
 
     const call: ToolCall = object.toolCall;
 
@@ -62,7 +68,11 @@ export async function runStep(options: RunStepOptions): Promise<StepResult> {
       history.push({ call, observation });
 
       if (isRepeating(history)) {
-        return blockedResult(history, "I appear to be repeating the same action with no change in observation.");
+        return blockedResult(
+          history,
+          usage,
+          "I appear to be repeating the same action with no change in observation.",
+        );
       }
       continue;
     }
@@ -71,7 +81,11 @@ export async function runStep(options: RunStepOptions): Promise<StepResult> {
     history.push({ call, observation: result.observation });
 
     if (isRepeating(history)) {
-      return blockedResult(history, "I appear to be repeating the same action with no change in observation.");
+      return blockedResult(
+        history,
+        usage,
+        "I appear to be repeating the same action with no change in observation.",
+      );
     }
 
     if (result.verdict) {
@@ -80,15 +94,16 @@ export async function runStep(options: RunStepOptions): Promise<StepResult> {
         confidence: result.verdict.confidence,
         confidenceReason: result.verdict.reason,
         turns: history,
+        usage,
       };
     }
   }
 
-  return blockedResult(history, `Turn budget of ${turnBudget} exhausted without reaching a verdict.`);
+  return blockedResult(history, usage, `Turn budget of ${turnBudget} exhausted without reaching a verdict.`);
 }
 
-function blockedResult(turns: TurnRecord[], reason: string): StepResult {
-  return { verdict: "blocked", confidence: 1, confidenceReason: reason, turns };
+function blockedResult(turns: TurnRecord[], usage: TokenUsage, reason: string): StepResult {
+  return { verdict: "blocked", confidence: 1, confidenceReason: reason, turns, usage };
 }
 
 function buildPrompt(instruction: string, history: TurnRecord[]): string {

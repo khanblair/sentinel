@@ -18,7 +18,7 @@ interface ApiErrorBody {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${backendHttpUrl()}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...init?.headers },
   });
 
   if (!response.ok) {
@@ -38,6 +38,12 @@ export interface ProviderConfigSummary {
   createdAt: string;
 }
 
+export interface AssistantSummary {
+  id: string;
+  name: string;
+  isBuiltIn: boolean;
+}
+
 export interface RunTriggerInput {
   assistantId: string;
   environmentId?: string | null;
@@ -47,6 +53,9 @@ export interface RunTriggerInput {
 }
 
 export const api = {
+  assistants: {
+    list: () => request<AssistantSummary[]>("/api/assistants"),
+  },
   projects: {
     list: () => request<Project[]>("/api/projects"),
     create: (input: { name: string; description?: string | null }) =>

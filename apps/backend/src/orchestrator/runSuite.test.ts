@@ -178,6 +178,149 @@ describe("runSuite", () => {
     expect(await prisma.run.count()).toBe(0);
   });
 
+  it("persists ProviderUsage rows for checklist generation and each step, attributed to the provider/model", async () => {
+    const { suite } = await seedSuiteWithOneCase(prisma);
+    const assistant = await seedAssistant(prisma);
+    const provider = new FakeProvider().queueObject({
+      object: { steps: ["assert the total is reduced by 10%"] },
+      usage: { promptTokens: 11, completionTokens: 7 },
+    });
+    assertPassStep(provider, "the total line item read the discounted amount");
+
+    const run = await runSuite({
+      prisma,
+      suiteId: suite.id,
+      assistantId: assistant.id,
+      mode: "interactive",
+      provider,
+      pageFactory: new FakePageFactory(),
+      resolveConfirmation: fullAutoResolver,
+      broadcast: () => {},
+    });
+
+    const usageRows = await prisma.providerUsage.findMany({ where: { runId: run.id } });
+    expect(usageRows).toHaveLength(2); // one for checklist generation, one for the step
+    expect(usageRows.every((row) => row.provider === "claude" && row.model === "fake-model")).toBe(true);
+    const totalPromptTokens = usageRows.reduce((sum, row) => sum + row.promptTokens, 0);
+    expect(totalPromptTokens).toBe(16); // 11 (checklist) + 5 (step, from assertPassStep's fixed usage)
+    // No maintained rate for "fake-model" — cost must stay null, not a guessed number.
+    expect(usageRows.every((row) => row.estimatedCostUsd === null)).toBe(true);
+  });
+
+  it("populates Run.insights with a summary after finishing", async () => {
+    const { suite } = await seedSuiteWithOneCase(prisma);
+    const assistant = await seedAssistant(prisma);
+    const provider = new FakeProvider().queueObject({
+      object: { steps: ["assert the total is reduced by 10%"] },
+      usage: { promptTokens: 5, completionTokens: 5 },
+    });
+    assertPassStep(provider, "the total line item read the discounted amount");
+
+    const run = await runSuite({
+      prisma,
+      suiteId: suite.id,
+      assistantId: assistant.id,
+      mode: "interactive",
+      provider,
+      pageFactory: new FakePageFactory(),
+      resolveConfirmation: fullAutoResolver,
+      broadcast: () => {},
+    });
+
+    const finished = await prisma.run.findUniqueOrThrow({ where: { id: run.id } });
+    expect(finished.insights).toBe("1 passed, 0 failed, 0 blocked.");
+  });
+
+  it("Interactive mode: pauses the run when the tester declines to continue past a systemic-looking failure", async () => {
+    const project = await new ProjectRepository(prisma).create({ name: "SoundWave" });
+    const suite = await new SuiteRepository(prisma).create({ projectId: project.id, name: "Checkout" });
+    const assistant = await seedAssistant(prisma);
+    const testCases = new TestCaseRepository(prisma);
+    for (let i = 0; i < 4; i += 1) {
+      await testCases.create({
+        suiteId: suite.id,
+        module: "Checkout",
+        title: `Case ${i}`,
+        priority: "P2",
+        urlPath: `/case-${i}`,
+        steps: "1. do thing",
+        expectedResult: "thing happens",
+      });
+    }
+
+    const provider = new FakeProvider();
+    for (let i = 0; i < 3; i += 1) {
+      provider.queueObject({ object: { steps: ["check thing"] }, usage: { promptTokens: 5, completionTokens: 5 } });
+      assertFailStep(provider, `case ${i} failed`);
+    }
+    // No 4th checklist/step scripted — if runSuite tried the 4th case despite the
+    // tester declining to continue, FakeProvider would throw and this test would
+    // fail with an error instead of a clean assertion on the run's final status.
+
+    const run = await runSuite({
+      prisma,
+      suiteId: suite.id,
+      assistantId: assistant.id,
+      mode: "interactive",
+      provider,
+      pageFactory: new FakePageFactory(),
+      resolveConfirmation: fullAutoResolver,
+      resolveRunPause: async () => false,
+      broadcast: () => {},
+    });
+
+    expect(run.status).toBe("blocked");
+    const stepLogs = await prisma.stepLog.findMany({ where: { runId: run.id } });
+    expect(stepLogs).toHaveLength(3);
+    const finished = await prisma.run.findUniqueOrThrow({ where: { id: run.id } });
+    expect(finished.insights).toContain("stopped early by the tester");
+  });
+
+  it("Full-Auto mode never calls resolveRunPause, even with the same early-failure pattern", async () => {
+    const project = await new ProjectRepository(prisma).create({ name: "SoundWave" });
+    const suite = await new SuiteRepository(prisma).create({ projectId: project.id, name: "Checkout" });
+    const assistant = await seedAssistant(prisma);
+    const testCases = new TestCaseRepository(prisma);
+    for (let i = 0; i < 3; i += 1) {
+      await testCases.create({
+        suiteId: suite.id,
+        module: "Checkout",
+        title: `Case ${i}`,
+        priority: "P2",
+        urlPath: `/case-${i}`,
+        steps: "1. do thing",
+        expectedResult: "thing happens",
+      });
+    }
+
+    const provider = new FakeProvider();
+    for (let i = 0; i < 3; i += 1) {
+      provider.queueObject({ object: { steps: ["check thing"] }, usage: { promptTokens: 5, completionTokens: 5 } });
+      assertFailStep(provider, `case ${i} failed`);
+    }
+
+    let resolveRunPauseCalls = 0;
+    const run = await runSuite({
+      prisma,
+      suiteId: suite.id,
+      assistantId: assistant.id,
+      mode: "full_auto",
+      provider,
+      pageFactory: new FakePageFactory(),
+      resolveConfirmation: fullAutoResolver,
+      resolveRunPause: async () => {
+        resolveRunPauseCalls += 1;
+        return false;
+      },
+      broadcast: () => {},
+    });
+
+    expect(resolveRunPauseCalls).toBe(0);
+    expect(run.status).toBe("failed");
+    const stepLogs = await prisma.stepLog.findMany({ where: { runId: run.id } });
+    expect(stepLogs).toHaveLength(3);
+  });
+
   it("marks the Run failed and still closes the page factory when checklist generation throws", async () => {
     const { suite } = await seedSuiteWithOneCase(prisma);
     const assistant = await seedAssistant(prisma);
