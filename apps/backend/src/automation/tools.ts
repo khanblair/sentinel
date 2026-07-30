@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Page } from "./page.js";
 
-export const toolCallSchema = z.discriminatedUnion("tool", [
+export const pageToolCallSchema = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("navigate"), url: z.string().min(1) }),
   z.object({ tool: z.literal("click"), selector: z.string().min(1) }),
   z.object({ tool: z.literal("type"), selector: z.string().min(1), value: z.string() }),
@@ -20,22 +20,34 @@ export const toolCallSchema = z.discriminatedUnion("tool", [
     // pass too, not only for failures.
     reason: z.string().min(1, "a reason citing the evidence observed is required"),
   }),
+]);
+
+/** These two never touch the Page — they need a human (or a Full-Auto default) on
+ * the other end, so they're handled by the action loop's resolver, not executeTool. */
+export const confirmationToolCallSchema = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("request_input"), prompt: z.string().min(1) }),
   z.object({ tool: z.literal("request_tester_action"), prompt: z.string().min(1) }),
 ]);
 
+export const toolCallSchema = z.union([pageToolCallSchema, confirmationToolCallSchema]);
+
+export type PageToolCall = z.infer<typeof pageToolCallSchema>;
+export type ConfirmationToolCall = z.infer<typeof confirmationToolCallSchema>;
 export type ToolCall = z.infer<typeof toolCallSchema>;
+
+export function isConfirmationToolCall(call: ToolCall): call is ConfirmationToolCall {
+  return call.tool === "request_input" || call.tool === "request_tester_action";
+}
 
 export interface ToolResult {
   observation: string;
-  requiresConfirmation?: boolean;
   verdict?: { status: "pass" | "fail"; confidence: number; reason: string };
 }
 
 /** Never throws — automation failures become an observation the loop can react to,
  * matching the design's "stuck detection sees a changed observation" model rather
  * than crashing the whole run on one bad selector. */
-export async function executeTool(page: Page, call: ToolCall): Promise<ToolResult> {
+export async function executeTool(page: Page, call: PageToolCall): Promise<ToolResult> {
   try {
     switch (call.tool) {
       case "navigate": {
@@ -64,10 +76,6 @@ export async function executeTool(page: Page, call: ToolCall): Promise<ToolResul
           observation: `assertion ${call.verdict} (confidence ${call.confidence}): ${call.reason}`,
           verdict: { status: call.verdict, confidence: call.confidence, reason: call.reason },
         };
-      case "request_input":
-        return { observation: `awaiting tester input: ${call.prompt}`, requiresConfirmation: true };
-      case "request_tester_action":
-        return { observation: `awaiting tester action: ${call.prompt}`, requiresConfirmation: true };
       default: {
         const exhaustive: never = call;
         throw new Error(`Unhandled tool call: ${JSON.stringify(exhaustive)}`);

@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { StepVerdict } from "@sentinel/shared";
 import type { Page } from "../automation/page.js";
-import { executeTool, toolCallSchema, type ToolCall } from "../automation/tools.js";
+import { executeTool, isConfirmationToolCall, toolCallSchema, type ToolCall } from "../automation/tools.js";
 import type { ProviderAdapter } from "../providers/types.js";
+import type { ConfirmationResolver } from "./confirmation.js";
 import { isRepeating, type TurnRecord } from "./stuckDetection.js";
 
 const DEFAULT_TURN_BUDGET = 8;
@@ -22,6 +23,10 @@ export interface RunStepOptions {
   page: Page;
   /** Injected explicitly — never a module-level singleton — so tests supply a FakeProvider. */
   provider: ProviderAdapter;
+  /** Resolves request_input/request_tester_action. Pass fullAutoResolver for
+   * unattended runs, or a resolver that prompts a tester over WebSocket for
+   * Interactive mode — the caller decides, this loop never assumes. */
+  resolveConfirmation: ConfirmationResolver;
   turnBudget?: number;
 }
 
@@ -47,25 +52,26 @@ export async function runStep(options: RunStepOptions): Promise<StepResult> {
     });
 
     const call: ToolCall = object.toolCall;
+
+    if (isConfirmationToolCall(call)) {
+      const answer = await options.resolveConfirmation({ tool: call.tool, prompt: call.prompt });
+      const observation =
+        answer !== null
+          ? `tester responded: ${answer}`
+          : `no value provided (${call.prompt}) — Full-Auto default or no tester present`;
+      history.push({ call, observation });
+
+      if (isRepeating(history)) {
+        return blockedResult(history, "I appear to be repeating the same action with no change in observation.");
+      }
+      continue;
+    }
+
     const result = await executeTool(options.page, call);
     history.push({ call, observation: result.observation });
 
     if (isRepeating(history)) {
-      return {
-        verdict: "blocked",
-        confidence: 1,
-        confidenceReason: "I appear to be repeating the same action with no change in observation.",
-        turns: history,
-      };
-    }
-
-    if (result.requiresConfirmation) {
-      return {
-        verdict: "blocked",
-        confidence: 1,
-        confidenceReason: `Awaiting tester response: ${result.observation}`,
-        turns: history,
-      };
+      return blockedResult(history, "I appear to be repeating the same action with no change in observation.");
     }
 
     if (result.verdict) {
@@ -78,12 +84,11 @@ export async function runStep(options: RunStepOptions): Promise<StepResult> {
     }
   }
 
-  return {
-    verdict: "blocked",
-    confidence: 1,
-    confidenceReason: `Turn budget of ${turnBudget} exhausted without reaching a verdict.`,
-    turns: history,
-  };
+  return blockedResult(history, `Turn budget of ${turnBudget} exhausted without reaching a verdict.`);
+}
+
+function blockedResult(turns: TurnRecord[], reason: string): StepResult {
+  return { verdict: "blocked", confidence: 1, confidenceReason: reason, turns };
 }
 
 function buildPrompt(instruction: string, history: TurnRecord[]): string {

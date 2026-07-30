@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakePage } from "./fakePage.js";
-import { executeTool } from "./tools.js";
+import { executeTool, isConfirmationToolCall } from "./tools.js";
 
 describe("executeTool", () => {
   it("navigate reports the resulting page title in the observation", async () => {
@@ -39,10 +39,10 @@ describe("executeTool", () => {
     });
   });
 
-  it("request_input marks the result as requiring confirmation instead of erroring", async () => {
-    const page = new FakePage();
-    const result = await executeTool(page, { tool: "request_input", prompt: "enter the 2FA code" });
-    expect(result.requiresConfirmation).toBe(true);
+  it("isConfirmationToolCall identifies request_input/request_tester_action, not page tools", () => {
+    expect(isConfirmationToolCall({ tool: "request_input", prompt: "enter the 2FA code" })).toBe(true);
+    expect(isConfirmationToolCall({ tool: "request_tester_action", prompt: "check your email" })).toBe(true);
+    expect(isConfirmationToolCall({ tool: "click", selector: "#a" })).toBe(false);
   });
 
   it("a failing automation call becomes an observation, not a thrown error", async () => {
