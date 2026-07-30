@@ -38,6 +38,9 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @sentinel/backend run db:generate
 
+      - name: Apply database migrations
+        run: pnpm --filter @sentinel/backend exec prisma migrate deploy
+
       - name: Typecheck
         run: pnpm run typecheck
 

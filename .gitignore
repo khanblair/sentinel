@@ -20,6 +20,9 @@ apps/backend/prisma/*.db-journal
 *.db
 *.db-journal
 
+# Local secrets (provider API key encryption key)
+apps/backend/.keys/
+
 # Playwright
 playwright-report/
 test-results/
