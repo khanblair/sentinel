@@ -22,3 +22,10 @@ export interface Page {
   title(): Promise<string>;
   listElements(): Promise<ElementSummary[]>;
 }
+
+/** Owns the browser lifecycle across an entire Suite run: one factory, one browser,
+ * one page per test case — the orchestrator never talks to Playwright directly. */
+export interface PageFactory {
+  getPage(url: string): Promise<Page>;
+  close(): Promise<void>;
+}

@@ -12,3 +12,15 @@ export type ConfirmationResolver = (request: ConfirmationRequest) => Promise<str
  * immediately with "no value provided" so judgment can fail the step instead of the
  * run hanging forever with nobody present to answer. */
 export const fullAutoResolver: ConfirmationResolver = async () => null;
+
+/** Narrow port over whatever actually publishes run:prompt / awaits
+ * run:prompt-response over WebSocket — keeps this module ignorant of `ws`. */
+export interface PromptBroker {
+  request(runId: string, prompt: string): Promise<string | null>;
+}
+
+/** Interactive mode (design §4.3): pause-and-ask cards. Every request_input/
+ * request_tester_action call is routed through the broker for this specific run. */
+export function createInteractiveResolver(broker: PromptBroker, runId: string): ConfirmationResolver {
+  return async (request) => broker.request(runId, request.prompt);
+}

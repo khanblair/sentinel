@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createTestPrismaClient, resetDb } from "../test/testDb.js";
+import { createTestPrismaClient, resetDb, seedAssistant } from "../test/testDb.js";
+import { WsPromptBroker } from "../ws/promptBroker.js";
 import { buildApp } from "./app.js";
 
 describe("HTTP API", () => {
@@ -11,7 +12,13 @@ describe("HTTP API", () => {
 
   beforeAll(() => {
     prisma = createTestPrismaClient();
-    app = buildApp({ prisma, encryptionKey: randomBytes(32), logger: false });
+    app = buildApp({
+      prisma,
+      encryptionKey: randomBytes(32),
+      broadcast: () => {},
+      promptBroker: new WsPromptBroker(() => {}),
+      logger: false,
+    });
   });
 
   beforeEach(async () => {
@@ -93,5 +100,60 @@ describe("HTTP API", () => {
     });
     expect(response.statusCode).toBe(201);
     expect(response.payload).not.toContain("sk-super-secret");
+  });
+
+  it("triggering a run rejects an invalid mode with 400, not a 500", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/suites/does-not-exist/run",
+      payload: {
+        assistantId: "a",
+        mode: "not-a-real-mode",
+        providerConfigId: "p",
+        model: "m",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("triggering a run for an unknown provider config returns 404, not a 500", async () => {
+    const assistant = await seedAssistant(prisma);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/suites/does-not-exist/run",
+      payload: {
+        assistantId: assistant.id,
+        mode: "full_auto",
+        providerConfigId: "does-not-exist",
+        model: "claude-sonnet",
+      },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("triggering a run accepts and responds 202 once inputs resolve, without waiting for the run", async () => {
+    const assistant = await seedAssistant(prisma);
+    const providerConfig = await app.inject({
+      method: "POST",
+      url: "/api/provider-configs",
+      payload: { provider: "claude", apiKey: "sk-test-key" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/suites/does-not-exist/run",
+      payload: {
+        assistantId: assistant.id,
+        mode: "full_auto",
+        providerConfigId: providerConfig.json().id,
+        model: "claude-sonnet",
+      },
+    });
+
+    // The route responds as soon as the provider config resolves — it never awaits
+    // runSuite itself (see registerRunRoutes), so a nonexistent suite id surfaces
+    // later as a logged error, not as this response's status.
+    expect(response.statusCode).toBe(202);
+    expect(response.json().runId).toBeTruthy();
   });
 });

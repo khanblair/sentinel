@@ -1,5 +1,6 @@
 import type { RawData, WebSocket, WebSocketServer } from "ws";
 import { isClientMessage, type ServerMessage } from "@sentinel/shared";
+import type { WsPromptBroker } from "./promptBroker.js";
 
 export function broadcast(wss: WebSocketServer, message: ServerMessage): void {
   const payload = JSON.stringify(message);
@@ -10,7 +11,7 @@ export function broadcast(wss: WebSocketServer, message: ServerMessage): void {
   }
 }
 
-export function attachConnectionHandler(wss: WebSocketServer): void {
+export function attachConnectionHandler(wss: WebSocketServer, promptBroker: WsPromptBroker): void {
   wss.on("connection", (socket: WebSocket) => {
     socket.on("message", (data: RawData) => {
       let parsed: unknown;
@@ -38,6 +39,11 @@ export function attachConnectionHandler(wss: WebSocketServer): void {
             serverTime: new Date().toISOString(),
           } satisfies ServerMessage),
         );
+        return;
+      }
+
+      if (parsed.type === "run:prompt-response") {
+        promptBroker.respond(parsed.requestId, parsed.value);
       }
     });
   });
