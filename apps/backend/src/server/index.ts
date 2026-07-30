@@ -1,7 +1,14 @@
 import { WebSocketServer } from "ws";
+import type { PrismaClient, ScheduledJob } from "@prisma/client";
 import type { ServerMessage } from "@sentinel/shared";
+import { createPlaywrightPageFactory } from "../automation/browserManager.js";
 import { createPrismaClient } from "../db/client.js";
+import { ProviderConfigRepository } from "../db/repositories/providerConfigRepository.js";
 import { seedBuiltInAssistants } from "../db/seedAssistants.js";
+import { fullAutoResolver } from "../executionLoop/confirmation.js";
+import { runSuite } from "../orchestrator/runSuite.js";
+import { createProviderAdapter } from "../providers/aiSdkProvider.js";
+import { startSchedulerLoop } from "../scheduler/schedulerLoop.js";
 import { loadOrCreateEncryptionKey } from "../security/encryption.js";
 import { attachConnectionHandler, broadcast as broadcastToClients } from "../ws/index.js";
 import { WsPromptBroker } from "../ws/promptBroker.js";
@@ -9,6 +16,35 @@ import { buildApp } from "./app.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
 const HOST = process.env.HOST ?? "127.0.0.1";
+
+async function runScheduledJob(
+  job: ScheduledJob,
+  prisma: PrismaClient,
+  providerConfigRepo: ProviderConfigRepository,
+  broadcast: (message: ServerMessage) => void,
+): Promise<void> {
+  if (!job.suiteId) {
+    console.error(`ScheduledJob ${job.id} has no suiteId — skipping`);
+    return;
+  }
+  const { apiKey, provider: providerName } = await providerConfigRepo.getDecryptedApiKey(job.providerConfigId);
+  const provider = createProviderAdapter(providerName, apiKey, job.model);
+
+  // Scheduled runs default to Full-Auto (design §4.6) — nobody is present to answer
+  // a pause-and-ask, so this never uses the interactive/WS-backed resolvers at all.
+  await runSuite({
+    prisma,
+    suiteId: job.suiteId,
+    assistantId: job.assistantId,
+    environmentId: job.environmentId,
+    mode: job.mode as "interactive" | "full_auto",
+    provider,
+    pageFactory: createPlaywrightPageFactory(),
+    resolveConfirmation: fullAutoResolver,
+    broadcast,
+    trigger: "scheduled",
+  });
+}
 
 async function main(): Promise<void> {
   const prisma = createPrismaClient();
@@ -26,6 +62,7 @@ async function main(): Promise<void> {
     }
   };
   const promptBroker = new WsPromptBroker(broadcast);
+  const providerConfigRepo = new ProviderConfigRepository(prisma, encryptionKey);
 
   const app = buildApp({ prisma, encryptionKey, broadcast, promptBroker });
 
@@ -36,8 +73,17 @@ async function main(): Promise<void> {
   wssBox.current = wss;
   attachConnectionHandler(wss, promptBroker);
 
+  const scheduler = startSchedulerLoop({
+    prisma,
+    onDue: (job) =>
+      runScheduledJob(job, prisma, providerConfigRepo, broadcast).catch((error: unknown) => {
+        app.log.error(error, `scheduled job ${job.id} failed`);
+      }),
+  });
+
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`received ${signal}, shutting down`);
+    scheduler.stop();
     wss.close();
     await app.close();
     await prisma.$disconnect();

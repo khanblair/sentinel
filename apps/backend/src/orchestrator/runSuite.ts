@@ -30,6 +30,9 @@ export interface RunSuiteOptions {
    * Defaults to alwaysContinueResolver, matching Full-Auto's "never pause" rule —
    * pass a WS-backed resolver to actually ask a tester. */
   resolveRunPause?: RunPauseResolver;
+  /** "manual" (a tester clicked Run Suite) or "scheduled" (the scheduler fired a
+   * ScheduledJob) — feeds Analytics' manual-vs-scheduled split (§5.10). */
+  trigger?: Run["trigger"];
 }
 
 const VERDICT_SEVERITY: Record<StepVerdict, number> = { pass: 0, blocked: 1, fail: 2 };
@@ -198,6 +201,7 @@ export async function runSuite(options: RunSuiteOptions): Promise<Run> {
     resolveConfirmation,
     broadcast,
     runId,
+    trigger = "manual",
   } = options;
   const resolveRunPause = mode === "interactive" ? (options.resolveRunPause ?? alwaysContinueResolver) : null;
 
@@ -218,7 +222,7 @@ export async function runSuite(options: RunSuiteOptions): Promise<Run> {
       assistantId,
       environmentId: environmentId ?? null,
       mode,
-      trigger: "manual",
+      trigger,
       status: "running",
     },
   });

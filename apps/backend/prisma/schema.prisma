@@ -97,8 +97,9 @@ model Assistant {
   isBuiltIn      Boolean @default(false)
   projectId      String?
 
-  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  runs    Run[]
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  runs          Run[]
+  scheduledJobs ScheduledJob[]
 
   @@index([projectId])
 }
@@ -188,8 +189,15 @@ model ScheduledJob {
   nextRunAt          DateTime
   lastRunAt          DateTime?
   isActive           Boolean   @default(true)
+  /// Which Assistant/provider/model to run as — a scheduled trigger has nobody
+  /// present to pick these interactively, so they must be fixed at creation time.
+  assistantId        String
+  providerConfigId   String
+  model              String
+  environmentId      String?
 
-  suite Suite? @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  suite     Suite?      @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  assistant Assistant   @relation(fields: [assistantId], references: [id])
 
   @@index([suiteId])
 }

@@ -9,6 +9,7 @@ import { TestCaseRepository } from "../db/repositories/testCaseRepository.js";
 import { EnvironmentRepository } from "../db/repositories/environmentRepository.js";
 import { ProviderConfigRepository } from "../db/repositories/providerConfigRepository.js";
 import { AssistantRepository } from "../db/repositories/assistantRepository.js";
+import { ScheduledJobRepository } from "../db/repositories/scheduledJobRepository.js";
 import type { WsPromptBroker } from "../ws/promptBroker.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerSuiteRoutes } from "./routes/suites.js";
@@ -17,6 +18,7 @@ import { registerEnvironmentRoutes } from "./routes/environments.js";
 import { registerProviderConfigRoutes } from "./routes/providerConfigs.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import { registerAssistantRoutes } from "./routes/assistants.js";
+import { registerScheduledJobRoutes } from "./routes/scheduledJobs.js";
 
 export interface BuildAppOptions {
   prisma: PrismaClient;
@@ -60,6 +62,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerProviderConfigRoutes(app, providerConfigRepo);
   registerRunRoutes(app, { prisma, providerConfigRepo, promptBroker, broadcast });
   registerAssistantRoutes(app, new AssistantRepository(prisma));
+  registerScheduledJobRoutes(app, new ScheduledJobRepository(prisma));
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);

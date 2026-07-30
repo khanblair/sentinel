@@ -91,6 +91,31 @@ describe("runSuite", () => {
 
     expect(pageFactory.closed).toBe(true);
     expect(pageFactory.requestedUrls).toEqual(["/cart"]);
+    expect(run.trigger).toBe("manual");
+  });
+
+  it("records trigger: 'scheduled' when passed explicitly (the scheduler's own runs)", async () => {
+    const { suite } = await seedSuiteWithOneCase(prisma);
+    const assistant = await seedAssistant(prisma);
+    const provider = new FakeProvider().queueObject({
+      object: { steps: ["assert the total is reduced by 10%"] },
+      usage: { promptTokens: 5, completionTokens: 5 },
+    });
+    assertPassStep(provider, "the total line item read the discounted amount");
+
+    const run = await runSuite({
+      prisma,
+      suiteId: suite.id,
+      assistantId: assistant.id,
+      mode: "full_auto",
+      provider,
+      pageFactory: new FakePageFactory(),
+      resolveConfirmation: fullAutoResolver,
+      broadcast: () => {},
+      trigger: "scheduled",
+    });
+
+    expect(run.trigger).toBe("scheduled");
   });
 
   it("stops a test case at its first non-pass step (short-circuit)", async () => {
