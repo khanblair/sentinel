@@ -2,9 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      style-src allows 'unsafe-inline' deliberately: script-src does not, and stays
+      'self' only (the actually dangerous vector). Vite's dev server injects CSS via
+      inline <style> tags for hot-reload — confirmed by actually running dev mode:
+      without this, styles.css silently fails to apply in `pnpm dev:desktop` even
+      though the exact same CSS works in a production build, where Vite instead
+      emits a same-origin <link rel="stylesheet"> file.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:4317 ws://127.0.0.1:4317 http://localhost:5173 ws://localhost:5173"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:4317 ws://127.0.0.1:4317 http://localhost:5173 ws://localhost:5173 http://localhost:5174 ws://localhost:5174"
     />
     <title>Sentinel</title>
   </head>
