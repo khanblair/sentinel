@@ -1,0 +1,22 @@
+{
+  "name": "sentinel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-driven desktop testing platform",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* --filter=./apps/* run build",
+    "typecheck": "pnpm --filter @sentinel/shared run build && pnpm -r run typecheck",
+    "lint": "pnpm --filter @sentinel/shared run build && pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "dev:backend": "pnpm --filter @sentinel/backend dev",
+    "dev:desktop": "pnpm --filter @sentinel/desktop dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

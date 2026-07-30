@@ -1,0 +1,23 @@
+appId: com.sentinel.desktop
+productName: Sentinel
+directories:
+  buildResources: build
+  output: release
+files:
+  - out/**/*
+  - "!**/*.ts"
+extraResources:
+  - from: ../backend/dist
+    to: backend/dist
+  - from: ../backend/prisma
+    to: backend/prisma
+    filter:
+      - "schema.prisma"
+mac:
+  target: dmg
+  category: public.app-category.developer-tools
+win:
+  target: nsis
+linux:
+  target: AppImage
+  category: Development

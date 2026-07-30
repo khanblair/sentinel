@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id                 String   @id @default(cuid())
+  name               String
+  description        String?
+  defaultAssistantId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  suites       Suite[]
+  environments Environment[]
+  rules        Rule[]
+  assistants   Assistant[]
+}
+
+model Suite {
+  id          String    @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testCases  TestCase[]
+  runs       Run[]
+  scheduledJobs ScheduledJob[]
+
+  @@index([projectId])
+}
+
+model TestCase {
+  id                String    @id @default(cuid())
+  suiteId           String
+  module            String
+  subModule         String?
+  title             String
+  priority          String
+  urlPath           String
+  precondition      String?
+  preconditionType  String    @default("auto")
+  steps             String
+  expectedResult    String
+  tags              String    @default("[]")
+  owner             String?
+  linkedIssueUrl    String?
+  archivedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  suite    Suite     @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  stepLogs StepLog[]
+
+  @@index([suiteId])
+}
+
+model Environment {
+  id                  String   @id @default(cuid())
+  projectId           String
+  name                String
+  baseUrl             String
+  credentialsProfile  String?
+  createdAt           DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runs    Run[]
+
+  @@index([projectId])
+}
+
+model Rule {
+  id        String   @id @default(cuid())
+  scope     String
+  projectId String?
+  text      String
+  createdAt DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Assistant {
+  id             String  @id @default(cuid())
+  name           String
+  systemPrompt   String
+  defaultSkills  String  @default("[]")
+  isBuiltIn      Boolean @default(false)
+  projectId      String?
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  runs    Run[]
+
+  @@index([projectId])
+}
+
+model Skill {
+  id         String  @id @default(cuid())
+  name       String  @unique
+  definition String
+  isBuiltIn  Boolean @default(false)
+}
+
+model ProviderConfig {
+  id             String   @id @default(cuid())
+  provider       String
+  label          String?
+  apiKeyEncrypted String
+  createdAt      DateTime @default(now())
+}
+
+model Run {
+  id            String    @id @default(cuid())
+  suiteId       String?
+  assistantId   String
+  environmentId String?
+  mode          String    @default("interactive")
+  trigger       String    @default("manual")
+  status        String    @default("pending")
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+
+  suite       Suite?       @relation(fields: [suiteId], references: [id], onDelete: SetNull)
+  assistant   Assistant    @relation(fields: [assistantId], references: [id])
+  environment Environment? @relation(fields: [environmentId], references: [id], onDelete: SetNull)
+  stepLogs    StepLog[]
+  usage       ProviderUsage[]
+
+  @@index([suiteId])
+}
+
+model StepLog {
+  id               String   @id @default(cuid())
+  runId            String
+  testCaseId       String?
+  stepIndex        Int
+  toolCall         String
+  observation      String
+  verdict          String
+  confidence       Float
+  confidenceReason String
+  createdAt        DateTime @default(now())
+
+  run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  testCase TestCase? @relation(fields: [testCaseId], references: [id], onDelete: SetNull)
+
+  @@index([runId])
+}
+
+model ProviderUsage {
+  id                String   @id @default(cuid())
+  runId             String
+  provider          String
+  model             String
+  promptTokens      Int
+  completionTokens  Int
+  estimatedCostUsd  Float
+  createdAt         DateTime @default(now())
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+model ScheduledJob {
+  id                 String    @id @default(cuid())
+  suiteId            String?
+  scheduleType       String
+  scheduleExpression String
+  timezone           String    @default("UTC")
+  mode               String    @default("full_auto")
+  nextRunAt          DateTime
+  lastRunAt          DateTime?
+  isActive           Boolean   @default(true)
+
+  suite Suite? @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+
+  @@index([suiteId])
+}
