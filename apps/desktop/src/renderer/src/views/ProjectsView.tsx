@@ -53,33 +53,45 @@ export function ProjectsView({ onSelectProject }: ProjectsViewProps): JSX.Elemen
     <section>
       <h2>Projects</h2>
       {error && <p role="alert">{error}</p>}
-      <form onSubmit={(event) => void handleCreate(event)}>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="New project name"
-          aria-label="New project name"
-        />
-        <button type="submit">Create project</button>
-      </form>
 
       {loading ? (
         <p>Loading…</p>
       ) : (
-        <ul>
+        <ul className="item-list">
           {projects.map((project) => (
-            <li key={project.id}>
-              <button type="button" onClick={() => onSelectProject(project)}>
-                {project.name}
-              </button>
-              <button type="button" onClick={() => void handleDelete(project.id)} aria-label={`Delete ${project.name}`}>
+            <li key={project.id} className="item-row">
+              <div className="item-row-main">
+                <button type="button" className="item-title-btn" onClick={() => onSelectProject(project)}>
+                  {project.name}
+                </button>
+                {project.description && <span className="item-subtext">{project.description}</span>}
+              </div>
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                onClick={() => void handleDelete(project.id)}
+                aria-label={`Delete ${project.name}`}
+              >
                 Delete
               </button>
             </li>
           ))}
-          {projects.length === 0 && <li>No projects yet — create one above.</li>}
+          {projects.length === 0 && <li className="empty-state">No projects yet — create one below.</li>}
         </ul>
       )}
+
+      <h3>New project</h3>
+      <form className="field-row" onSubmit={(event) => void handleCreate(event)}>
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Project name"
+          aria-label="New project name"
+        />
+        <button type="submit" className="btn btn-primary">
+          Create project
+        </button>
+      </form>
     </section>
   );
 }

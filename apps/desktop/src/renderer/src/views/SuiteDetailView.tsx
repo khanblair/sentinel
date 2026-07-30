@@ -100,23 +100,26 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
 
   return (
     <section>
-      <button type="button" onClick={onBack}>
+      <button type="button" className="back-link" onClick={onBack}>
         ← Suites
       </button>
       <h2>{suite.name}</h2>
       {error && <p role="alert">{error}</p>}
 
       <h3>Test cases</h3>
-      <ul>
+      <ul className="item-list">
         {testCases.map((testCase) => (
-          <li key={testCase.id}>
-            <strong>{testCase.title}</strong> — {testCase.urlPath}
+          <li key={testCase.id} className="item-row">
+            <div className="item-row-main">
+              <span className="item-title-btn item-title-static">{testCase.title}</span>
+              <span className="item-subtext">{testCase.urlPath}</span>
+            </div>
           </li>
         ))}
-        {testCases.length === 0 && <li>No test cases yet.</li>}
+        {testCases.length === 0 && <li className="empty-state">No test cases yet — add one below.</li>}
       </ul>
 
-      <form onSubmit={(event) => void handleCreateTestCase(event)}>
+      <form className="field-stack" onSubmit={(event) => void handleCreateTestCase(event)}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" aria-label="Title" />
         <input value={urlPath} onChange={(e) => setUrlPath(e.target.value)} placeholder="/path" aria-label="URL path" />
         <textarea value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="Steps" aria-label="Steps" />
@@ -126,11 +129,13 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
           placeholder="Expected result"
           aria-label="Expected result"
         />
-        <button type="submit">Add test case</button>
+        <button type="submit" className="btn btn-primary">
+          Add test case
+        </button>
       </form>
 
       <h3>Run this suite</h3>
-      <div>
+      <div className="field-row">
         <select value={assistantId} onChange={(e) => setAssistantId(e.target.value)} aria-label="Assistant">
           <option value="">Select an assistant…</option>
           {assistants.map((assistant) => (
@@ -164,7 +169,7 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
           <option value="interactive">Interactive</option>
           <option value="full_auto">Full-Auto</option>
         </select>
-        <button type="button" onClick={handleTriggerRun}>
+        <button type="button" className="btn btn-primary" onClick={handleTriggerRun}>
           Run suite
         </button>
       </div>

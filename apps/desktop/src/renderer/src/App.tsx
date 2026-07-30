@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Project, Run, RunMode, ServerMessage, StepLog, Suite } from "@sentinel/shared";
 import { api, backendHttpUrl, backendWsUrl } from "./api/client";
-import { useBackendSocket } from "./ws/useBackendSocket";
+import { useBackendSocket, type SocketConnectionState } from "./ws/useBackendSocket";
 import { ProjectsView } from "./views/ProjectsView";
 import { SuitesView } from "./views/SuitesView";
 import { SuiteDetailView } from "./views/SuiteDetailView";
@@ -10,6 +10,23 @@ import type { PendingPrompt } from "./components/RunTicker";
 
 type View = "projects" | "suites" | "suite-detail" | "settings";
 type HealthState = "checking" | "connected" | "unreachable";
+type DotState = "ok" | "pending" | "bad";
+
+function statusDotClass(state: DotState): string {
+  return `status-dot ${state}`;
+}
+
+function healthDotState(health: HealthState): DotState {
+  if (health === "connected") return "ok";
+  if (health === "checking") return "pending";
+  return "bad";
+}
+
+function connectionDotState(state: SocketConnectionState): DotState {
+  if (state === "connected") return "ok";
+  if (state === "connecting") return "pending";
+  return "bad";
+}
 
 export function App(): JSX.Element {
   const [view, setView] = useState<View>("projects");
@@ -85,56 +102,81 @@ export function App(): JSX.Element {
     });
   }
 
+  const onProjectsTab = view === "projects" || view === "suites" || view === "suite-detail";
+
   return (
-    <main>
-      <header>
-        <h1>Sentinel</h1>
-        <p>
-          Backend: <strong>{health}</strong> · Live updates: <strong>{connectionState}</strong>
-        </p>
-        <nav>
-          <button type="button" onClick={() => setView("projects")}>
-            Projects
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-mark" />
+          <span className="sidebar-brand-name">Sentinel</span>
+        </div>
+
+        <nav className="sidebar-nav">
+          <button
+            type="button"
+            className={`nav-item${onProjectsTab ? " active" : ""}`}
+            onClick={() => setView("projects")}
+          >
+            <span className="nav-item-icon">▤</span> Projects
           </button>
-          <button type="button" onClick={() => setView("settings")}>
-            Settings
+          <button
+            type="button"
+            className={`nav-item${view === "settings" ? " active" : ""}`}
+            onClick={() => setView("settings")}
+          >
+            <span className="nav-item-icon">⚙</span> Settings
           </button>
         </nav>
-      </header>
 
-      {view === "projects" && (
-        <ProjectsView
-          onSelectProject={(selected) => {
-            setProject(selected);
-            setView("suites");
-          }}
-        />
-      )}
+        <div className="sidebar-footer">
+          <div className="status-row">
+            <span className={statusDotClass(healthDotState(health))} /> Backend {health}
+          </div>
+          <div className="status-row">
+            <span className={statusDotClass(connectionDotState(connectionState))} /> Live updates{" "}
+            {connectionState}
+          </div>
+        </div>
+      </aside>
 
-      {view === "suites" && project && (
-        <SuitesView
-          project={project}
-          onBack={() => setView("projects")}
-          onSelectSuite={(selected) => {
-            setSuite(selected);
-            setView("suite-detail");
-          }}
-        />
-      )}
+      <main className="main-content">
+        <div className="content-container">
+          {view === "projects" && (
+            <ProjectsView
+              onSelectProject={(selected) => {
+                setProject(selected);
+                setView("suites");
+              }}
+            />
+          )}
 
-      {view === "suite-detail" && suite && (
-        <SuiteDetailView
-          suite={suite}
-          onBack={() => setView("suites")}
-          onTriggerRun={handleTriggerRun}
-          activeRun={activeRun}
-          activeRunSteps={activeRunSteps}
-          pendingPrompt={pendingPrompt}
-          onAnswerPrompt={handleAnswerPrompt}
-        />
-      )}
+          {view === "suites" && project && (
+            <SuitesView
+              project={project}
+              onBack={() => setView("projects")}
+              onSelectSuite={(selected) => {
+                setSuite(selected);
+                setView("suite-detail");
+              }}
+            />
+          )}
 
-      {view === "settings" && <SettingsView />}
-    </main>
+          {view === "suite-detail" && suite && (
+            <SuiteDetailView
+              suite={suite}
+              onBack={() => setView("suites")}
+              onTriggerRun={handleTriggerRun}
+              activeRun={activeRun}
+              activeRunSteps={activeRunSteps}
+              pendingPrompt={pendingPrompt}
+              onAnswerPrompt={handleAnswerPrompt}
+            />
+          )}
+
+          {view === "settings" && <SettingsView />}
+        </div>
+      </main>
+    </div>
   );
 }

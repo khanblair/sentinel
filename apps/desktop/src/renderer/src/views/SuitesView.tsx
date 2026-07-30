@@ -44,35 +44,42 @@ export function SuitesView({ project, onBack, onSelectSuite }: SuitesViewProps):
 
   return (
     <section>
-      <button type="button" onClick={onBack}>
+      <button type="button" className="back-link" onClick={onBack}>
         ← Projects
       </button>
-      <h2>{project.name} — Suites</h2>
+      <h2>{project.name}</h2>
+      <p>Suites</p>
       {error && <p role="alert">{error}</p>}
-      <form onSubmit={(event) => void handleCreate(event)}>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="New suite name"
-          aria-label="New suite name"
-        />
-        <button type="submit">Create suite</button>
-      </form>
 
       {loading ? (
         <p>Loading…</p>
       ) : (
-        <ul>
+        <ul className="item-list">
           {suites.map((suite) => (
-            <li key={suite.id}>
-              <button type="button" onClick={() => onSelectSuite(suite)}>
-                {suite.name}
-              </button>
+            <li key={suite.id} className="item-row">
+              <div className="item-row-main">
+                <button type="button" className="item-title-btn" onClick={() => onSelectSuite(suite)}>
+                  {suite.name}
+                </button>
+              </div>
             </li>
           ))}
-          {suites.length === 0 && <li>No suites yet — create one above.</li>}
+          {suites.length === 0 && <li className="empty-state">No suites yet — create one below.</li>}
         </ul>
       )}
+
+      <h3>New suite</h3>
+      <form className="field-row" onSubmit={(event) => void handleCreate(event)}>
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Suite name"
+          aria-label="New suite name"
+        />
+        <button type="submit" className="btn btn-primary">
+          Create suite
+        </button>
+      </form>
     </section>
   );
 }
