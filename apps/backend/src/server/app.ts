@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import type { PrismaClient } from "@prisma/client";
 import type { ServerMessage } from "@sentinel/shared";
 import { checkDatabaseConnection } from "../db/client.js";
@@ -32,6 +33,13 @@ export interface BuildAppOptions {
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const { prisma, encryptionKey, broadcast, promptBroker } = options;
   const app = Fastify({ logger: options.logger ?? true });
+
+  // The renderer is never same-origin as this server: it loads from file://, a
+  // packaged app:// scheme, or the Vite dev server — all different origins from
+  // http://127.0.0.1:4317. Permissive here is deliberate (v1 is loopback-only,
+  // single-user, local-first per design §10) — tighten this when the network-
+  // addressable hosted mode (§7) introduces a real multi-origin threat model.
+  void app.register(cors, { origin: true });
 
   app.get("/health", async (_request, reply) => {
     const dbOk = await checkDatabaseConnection(prisma);
