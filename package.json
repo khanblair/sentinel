@@ -10,7 +10,8 @@
     "lint": "pnpm --filter @sentinel/shared run build && pnpm -r run lint",
     "test": "pnpm -r run test",
     "dev:backend": "pnpm --filter @sentinel/backend dev",
-    "dev:desktop": "pnpm --filter @sentinel/desktop dev"
+    "dev:desktop": "pnpm --filter @sentinel/desktop dev",
+    "package:desktop": "node scripts/package-desktop.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

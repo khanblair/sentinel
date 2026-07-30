@@ -1,0 +1,59 @@
+name: Package
+
+# Deliberately separate from ci.yml and never runs on every push: electron-builder
+# is slow (bundles the entire backend node_modules — see electron-builder.yml) and
+# an unsigned cross-platform installer build is exactly the kind of flaky, opaque
+# failure that shouldn't block every other phase's verification. This proves the
+# installer *builds*, not that it launches — there's no way to run a packaged
+# Electron GUI app inside a CI runner.
+on:
+  workflow_dispatch: {}
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: "file:./dev.db"
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and package
+        run: pnpm run package:desktop
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-${{ matrix.os }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+          if-no-files-found: error

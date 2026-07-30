@@ -13,6 +13,7 @@ out/
 release/
 build/
 *.tsbuildinfo
+apps/desktop/backend-deploy/
 
 # Prisma / SQLite
 apps/backend/prisma/*.db
@@ -20,8 +21,9 @@ apps/backend/prisma/*.db-journal
 *.db
 *.db-journal
 
-# Local secrets (provider API key encryption key)
-apps/backend/.keys/
+# Local secrets (provider API key encryption key) — apps/backend/.keys/ is where it
+# normally lands, but the top-level pattern covers it wherever cwd ends up during dev.
+.keys/
 
 # Playwright
 playwright-report/

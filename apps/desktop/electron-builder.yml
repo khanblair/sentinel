@@ -7,12 +7,23 @@ files:
   - out/**/*
   - "!**/*.ts"
 extraResources:
-  - from: ../backend/dist
-    to: backend/dist
-  - from: ../backend/prisma
-    to: backend/prisma
-    filter:
-      - "schema.prisma"
+  # backend-deploy/ is produced by `pnpm --filter @sentinel/backend deploy` (see
+  # package:desktop in the root package.json) — a self-contained copy with its own
+  # node_modules, not the workspace's apps/backend directly. This matters: pnpm's
+  # normal node_modules is full of symlinks with relative targets like
+  # ../../../node_modules/.pnpm/... that resolve correctly in place but break the
+  # moment they're copied elsewhere (confirmed locally — electron-builder does not
+  # dereference symlinks, so packaging apps/backend/node_modules directly produced
+  # an app that failed at launch with ENOENT on every symlinked dependency).
+  # `pnpm deploy` rewrites every symlink to stay self-contained within its own
+  # node_modules/.pnpm store, so it survives being copied into the app bundle — with
+  # one exception (also confirmed locally): pnpm deploy still leaves one symlink,
+  # node_modules/.pnpm/node_modules/@sentinel/backend, pointing back at the original
+  # apps/backend source directory rather than at itself. Nothing imports the backend
+  # by its own package name, so package:desktop deletes that one link after deploy
+  # rather than shipping a dangling symlink that breaks code-signing on macOS.
+  - from: ./backend-deploy
+    to: backend
 mac:
   target: dmg
   category: public.app-category.developer-tools

@@ -1,4 +1,8 @@
-import { parseExpression } from "cron-parser";
+// Default + destructure, not a named import — cron-parser ships as CJS and named-
+// export interop for it fails under Electron's bundled Node in a packaged build
+// (same class of issue as @prisma/client — see db/client.ts).
+import cronParserPkg from "cron-parser";
+const { parseExpression } = cronParserPkg;
 import { ValidationError } from "../errors.js";
 
 export interface ScheduleSpec {

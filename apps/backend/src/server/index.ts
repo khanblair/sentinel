@@ -1,7 +1,9 @@
+import { join } from "node:path";
 import { WebSocketServer } from "ws";
 import type { PrismaClient, ScheduledJob } from "@prisma/client";
 import type { ServerMessage } from "@sentinel/shared";
 import { createPlaywrightPageFactory } from "../automation/browserManager.js";
+import { applyPendingMigrations } from "../db/applyMigrations.js";
 import { createPrismaClient } from "../db/client.js";
 import { ProviderConfigRepository } from "../db/repositories/providerConfigRepository.js";
 import { seedBuiltInAssistants } from "../db/seedAssistants.js";
@@ -49,6 +51,14 @@ async function runScheduledJob(
 async function main(): Promise<void> {
   const prisma = createPrismaClient();
   const encryptionKey = loadOrCreateEncryptionKey();
+  // A packaged desktop app has no CLI step a user runs to migrate — resourcesPath
+  // (an Electron-only process field, not in @types/node) is where extraResources
+  // land once packaged; process.cwd() covers plain `pnpm dev`.
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const migrationsDir = resourcesPath
+    ? join(resourcesPath, "backend", "prisma", "migrations")
+    : join(process.cwd(), "prisma", "migrations");
+  await applyPendingMigrations(prisma, migrationsDir);
   await seedBuiltInAssistants(prisma);
 
   // The WebSocketServer can't be constructed until after `app.listen()` gives us

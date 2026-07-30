@@ -15,10 +15,21 @@ function spawnBackendIfNeeded(): void {
     return;
   }
 
-  const backendEntry = join(__dirname, "../../../backend/dist/server/index.js");
+  // extraResources land under resourcesPath (e.g. Contents/Resources on macOS), not
+  // inside app.asar — __dirname here points *into* the asar, so it can never reach
+  // the backend. resourcesPath is the only path that's actually correct once packaged.
+  const backendEntry = join(process.resourcesPath, "backend", "dist", "server", "index.js");
+  // resourcesPath is read-only once installed (e.g. under /Applications on macOS) —
+  // the SQLite file and the generated encryption key both need a writable directory.
+  const dataDir = app.getPath("userData");
   backendProcess = spawn(process.execPath, [backendEntry], {
     stdio: "inherit",
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    cwd: dataDir,
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      DATABASE_URL: `file:${join(dataDir, "sentinel.db")}`,
+    },
   });
 
   backendProcess.on("exit", (code) => {

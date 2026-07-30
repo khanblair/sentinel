@@ -1,4 +1,7 @@
-import { PrismaClient, type Assistant } from "@prisma/client";
+// Default + destructure, not a named import — see db/client.ts for why.
+import pkg, { type Assistant } from "@prisma/client";
+const { PrismaClient } = pkg;
+type PrismaClient = InstanceType<typeof pkg.PrismaClient>;
 
 export function createTestPrismaClient(): PrismaClient {
   return new PrismaClient();

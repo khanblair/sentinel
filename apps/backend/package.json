@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "main": "./dist/server/index.js",
+  "files": [
+    "dist",
+    "prisma/schema.prisma",
+    "prisma/migrations"
+  ],
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
