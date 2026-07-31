@@ -7,9 +7,10 @@ import { ProjectsView } from "./views/ProjectsView";
 import { SuitesView } from "./views/SuitesView";
 import { SuiteDetailView } from "./views/SuiteDetailView";
 import { SettingsView } from "./views/SettingsView";
+import { AdHocView } from "./views/AdHocView";
 import type { PendingPrompt } from "./components/RunTicker";
 
-type View = "dashboard" | "projects" | "suites" | "suite-detail" | "settings";
+type View = "dashboard" | "projects" | "suites" | "suite-detail" | "settings" | "adhoc";
 type HealthState = "checking" | "connected" | "unreachable";
 type DotState = "ok" | "pending" | "bad";
 
@@ -103,6 +104,19 @@ export function App(): JSX.Element {
     });
   }
 
+  function handleTriggerAdHocRun(input: {
+    url: string;
+    checklist: string[];
+    assistantId: string;
+    mode: RunMode;
+    providerConfigId: string;
+    model: string;
+  }): void {
+    api.adhoc.run(input).catch((err: unknown) => {
+      console.error("Failed to trigger ad-hoc run:", err);
+    });
+  }
+
   async function handleOpenRecentRun(recent: RecentRun): Promise<void> {
     if (!recent.projectId || !recent.suiteId) return;
     try {
@@ -128,6 +142,7 @@ export function App(): JSX.Element {
   if (view === "suites" && project) breadcrumb.push(project.name);
   if (view === "suite-detail" && project && suite) breadcrumb.push(project.name, suite.name);
   if (view === "settings") breadcrumb.push("Settings");
+  if (view === "adhoc") breadcrumb.push("New chat");
 
   return (
     <div className="app-shell">
@@ -144,6 +159,13 @@ export function App(): JSX.Element {
             onClick={() => setView("dashboard")}
           >
             <span className="nav-item-icon">⌂</span> Dashboard
+          </button>
+          <button
+            type="button"
+            className={`nav-item${view === "adhoc" ? " active" : ""}`}
+            onClick={() => setView("adhoc")}
+          >
+            <span className="nav-item-icon">+</span> New chat
           </button>
           <button
             type="button"
@@ -223,6 +245,16 @@ export function App(): JSX.Element {
           )}
 
           {view === "settings" && <SettingsView />}
+
+          {view === "adhoc" && (
+            <AdHocView
+              onTriggerRun={handleTriggerAdHocRun}
+              activeRun={activeRun}
+              activeRunSteps={activeRunSteps}
+              pendingPrompt={pendingPrompt}
+              onAnswerPrompt={handleAnswerPrompt}
+            />
+          )}
         </div>
       </main>
     </div>

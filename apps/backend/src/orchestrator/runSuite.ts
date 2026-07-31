@@ -1,15 +1,15 @@
-import type { PrismaClient, Run as PrismaRun, StepLog as PrismaStepLog, TestCase } from "@prisma/client";
-import type { Run, RunMode, ServerMessage, StepLog, StepVerdict } from "@sentinel/shared";
-import { estimateCostUsd } from "../analytics/cost.js";
+import type { PrismaClient, TestCase } from "@prisma/client";
+import type { Run, RunMode, ServerMessage, StepVerdict } from "@sentinel/shared";
 import { generateChecklistFromTestCase } from "../checklistGenerator/index.js";
 import { RuleRepository } from "../db/repositories/ruleRepository.js";
 import { NotFoundError } from "../errors.js";
-import { runStep, type StepResult } from "../executionLoop/actionLoop.js";
 import type { ConfirmationResolver } from "../executionLoop/confirmation.js";
 import { generateRunInsights } from "../metacognition/insights.js";
 import { alwaysContinueResolver, shouldOfferEarlyStop, type RunPauseResolver } from "../metacognition/runPause.js";
-import type { ProviderAdapter, TokenUsage } from "../providers/types.js";
+import type { ProviderAdapter } from "../providers/types.js";
 import type { PageFactory } from "../automation/page.js";
+import { runChecklistSteps } from "./runChecklistSteps.js";
+import { recordUsage, serializeRun, verdictToRunStatus, worstVerdict } from "./shared.js";
 import { composePersonaAndRules } from "./systemPrompt.js";
 
 export interface RunSuiteOptions {
@@ -37,77 +37,6 @@ export interface RunSuiteOptions {
   trigger?: Run["trigger"];
 }
 
-const VERDICT_SEVERITY: Record<StepVerdict, number> = { pass: 0, blocked: 1, fail: 2 };
-
-function worstVerdict(a: StepVerdict, b: StepVerdict): StepVerdict {
-  return VERDICT_SEVERITY[b] > VERDICT_SEVERITY[a] ? b : a;
-}
-
-function verdictToRunStatus(verdict: StepVerdict): Run["status"] {
-  switch (verdict) {
-    case "pass":
-      return "passed";
-    case "fail":
-      return "failed";
-    case "blocked":
-      return "blocked";
-    default: {
-      const exhaustive: never = verdict;
-      throw new Error(`Unhandled verdict: ${String(exhaustive)}`);
-    }
-  }
-}
-
-function serializeRun(run: PrismaRun): Run {
-  return {
-    id: run.id,
-    suiteId: run.suiteId,
-    assistantId: run.assistantId,
-    environmentId: run.environmentId,
-    mode: run.mode as RunMode,
-    trigger: run.trigger as Run["trigger"],
-    status: run.status as Run["status"],
-    startedAt: run.startedAt.toISOString(),
-    finishedAt: run.finishedAt ? run.finishedAt.toISOString() : null,
-  };
-}
-
-function serializeStepLog(step: PrismaStepLog): StepLog {
-  return {
-    id: step.id,
-    runId: step.runId,
-    testCaseId: step.testCaseId,
-    stepIndex: step.stepIndex,
-    toolCall: JSON.parse(step.toolCall) as Record<string, unknown>,
-    observation: step.observation,
-    verdict: step.verdict as StepVerdict,
-    confidence: step.confidence,
-    confidenceReason: step.confidenceReason,
-    createdAt: step.createdAt.toISOString(),
-  };
-}
-
-async function recordUsage(
-  prisma: PrismaClient,
-  runId: string,
-  provider: ProviderAdapter,
-  usage: TokenUsage,
-): Promise<void> {
-  if (usage.promptTokens === 0 && usage.completionTokens === 0) {
-    return;
-  }
-  await prisma.providerUsage.create({
-    data: {
-      runId,
-      provider: provider.provider,
-      model: provider.model,
-      promptTokens: usage.promptTokens,
-      completionTokens: usage.completionTokens,
-      estimatedCostUsd: estimateCostUsd(provider.model, usage.promptTokens, usage.completionTokens),
-    },
-  });
-}
-
 interface ExecuteTestCaseParams {
   prisma: PrismaClient;
   runId: string;
@@ -123,9 +52,9 @@ interface ExecuteTestCaseParams {
   personaPrefix: string;
 }
 
-/** One Test Case's checklist, start to finish: generate it, run each step, persist
- * a StepLog + broadcast it, stop at the first non-pass step. Pulled out of runSuite
- * to keep that function's branching (Insights, run-level pause) readable. */
+/** One Test Case's checklist, start to finish: generate it, then run its steps via
+ * runChecklistSteps. Pulled out of runSuite to keep that function's branching
+ * (Insights, run-level pause) readable. */
 async function executeTestCase(params: ExecuteTestCaseParams): Promise<StepVerdict> {
   const {
     prisma,
@@ -151,31 +80,18 @@ async function executeTestCase(params: ExecuteTestCaseParams): Promise<StepVerdi
 
   const page = await pageFactory.getPage(`${baseUrl}${testCase.urlPath}`);
 
-  let caseVerdict: StepVerdict = "pass";
-  for (const instruction of checklist.steps) {
-    const result: StepResult = await runStep({ instruction, page, provider, resolveConfirmation, personaPrefix });
-    await recordUsage(prisma, runId, provider, result.usage);
-
-    const stepLog = await prisma.stepLog.create({
-      data: {
-        runId,
-        testCaseId: testCase.id,
-        stepIndex: stepIndexCounter.value++,
-        toolCall: JSON.stringify({ turns: result.turns }),
-        observation: result.turns.at(-1)?.observation ?? "",
-        verdict: result.verdict,
-        confidence: result.confidence,
-        confidenceReason: result.confidenceReason,
-      },
-    });
-    broadcast({ type: "run:step", runId, step: serializeStepLog(stepLog) });
-
-    caseVerdict = worstVerdict(caseVerdict, result.verdict);
-    if (result.verdict !== "pass") {
-      break;
-    }
-  }
-  return caseVerdict;
+  return runChecklistSteps({
+    prisma,
+    runId,
+    provider,
+    page,
+    resolveConfirmation,
+    broadcast,
+    steps: checklist.steps,
+    testCaseId: testCase.id,
+    stepIndexCounter,
+    personaPrefix,
+  });
 }
 
 /** True to keep going. Only actually asks (via resolveRunPause) at the design §6.4

@@ -250,4 +250,21 @@ export const api = {
     usage: (suiteId: string) => request<UsageByProviderModel[]>(`/api/suites/${suiteId}/analytics/usage`),
     heatmap: (projectId: string) => request<ModuleRisk[]>(`/api/projects/${projectId}/analytics/heatmap`),
   },
+  adhoc: {
+    generateChecklist: (input: {
+      url: string;
+      instruction: string;
+      assistantId: string;
+      providerConfigId: string;
+      model: string;
+    }) => request<{ steps: string[] }>("/api/adhoc/checklist", { method: "POST", body: JSON.stringify(input) }),
+    run: (input: {
+      url: string;
+      checklist: string[];
+      assistantId: string;
+      mode: RunMode;
+      providerConfigId: string;
+      model: string;
+    }) => request<{ runId: string; status: string }>("/api/adhoc/run", { method: "POST", body: JSON.stringify(input) }),
+  },
 };

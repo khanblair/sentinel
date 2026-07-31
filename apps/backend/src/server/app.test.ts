@@ -279,6 +279,95 @@ describe("HTTP API", () => {
     expect(response.json().message).toContain("priority");
   });
 
+  it("POST /api/adhoc/checklist rejects an invalid body with 400, not a 500", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/adhoc/checklist", payload: {} });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("POST /api/adhoc/checklist 404s for an unknown provider config, without ever reaching the network", async () => {
+    const assistant = await seedAssistant(prisma);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/adhoc/checklist",
+      payload: {
+        url: "https://example.com",
+        instruction: "test the checkout flow",
+        assistantId: assistant.id,
+        providerConfigId: "does-not-exist",
+        model: "claude-sonnet",
+      },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("POST /api/adhoc/checklist 404s for an unknown assistant, without ever reaching the network", async () => {
+    const providerConfig = await app.inject({
+      method: "POST",
+      url: "/api/provider-configs",
+      payload: { provider: "claude", apiKey: "sk-test-key" },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/adhoc/checklist",
+      payload: {
+        url: "https://example.com",
+        instruction: "test the checkout flow",
+        assistantId: "does-not-exist",
+        providerConfigId: providerConfig.json().id,
+        model: "claude-sonnet",
+      },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("POST /api/adhoc/run rejects an empty checklist with 400, not a 500", async () => {
+    const assistant = await seedAssistant(prisma);
+    const providerConfig = await app.inject({
+      method: "POST",
+      url: "/api/provider-configs",
+      payload: { provider: "claude", apiKey: "sk-test-key" },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/adhoc/run",
+      payload: {
+        url: "https://example.com",
+        checklist: [],
+        assistantId: assistant.id,
+        mode: "full_auto",
+        providerConfigId: providerConfig.json().id,
+        model: "claude-sonnet",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("POST /api/adhoc/run accepts and responds 202 once inputs resolve, without waiting for the run", async () => {
+    const providerConfig = await app.inject({
+      method: "POST",
+      url: "/api/provider-configs",
+      payload: { provider: "claude", apiKey: "sk-test-key" },
+    });
+    // Deliberately a nonexistent assistantId, matching the suite-trigger test above:
+    // runAdHoc fails fast on the Assistant lookup, before it ever creates a Run row —
+    // a real assistantId here would let the fire-and-forget background call reach a
+    // real Playwright browser launch and race the next test's resetDb().
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/adhoc/run",
+      payload: {
+        url: "https://example.com",
+        checklist: ["assert the page loads"],
+        assistantId: "does-not-exist",
+        mode: "full_auto",
+        providerConfigId: providerConfig.json().id,
+        model: "claude-sonnet",
+      },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.json().runId).toBeTruthy();
+  });
+
   it("scheduled-jobs: create, list, and delete round-trip through the API", async () => {
     const assistant = await seedAssistant(prisma);
     const providerConfig = await app.inject({
