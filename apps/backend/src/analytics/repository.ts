@@ -26,6 +26,18 @@ export interface UsageByProviderModel {
   runCount: number;
 }
 
+export interface RecentRun {
+  runId: string;
+  status: string;
+  trigger: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  suiteId: string | null;
+  suiteName: string | null;
+  projectId: string | null;
+  projectName: string | null;
+}
+
 /** Read-only aggregation over Run/StepLog/ProviderUsage (design §5.10) — everything
  * here reads from data written by runSuite (Phase 4a's usage plumbing, Phase 3b's
  * Run/StepLog persistence); nothing in this file writes anything. */
@@ -98,6 +110,34 @@ export class AnalyticsRepository {
       }));
 
     return computeModuleRiskHeatmap(outcomes);
+  }
+
+  /** Cross-project run feed for the Dashboard home screen — the only query in this
+   * file that isn't scoped to a single suite/project. */
+  async recentRuns(limit = 10): Promise<RecentRun[]> {
+    const runs = await this.prisma.run.findMany({
+      orderBy: { startedAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        status: true,
+        trigger: true,
+        startedAt: true,
+        finishedAt: true,
+        suite: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
+      },
+    });
+    return runs.map((run) => ({
+      runId: run.id,
+      status: run.status,
+      trigger: run.trigger,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      suiteId: run.suite?.id ?? null,
+      suiteName: run.suite?.name ?? null,
+      projectId: run.suite?.project.id ?? null,
+      projectName: run.suite?.project.name ?? null,
+    }));
   }
 
   async usageBySuite(suiteId: string): Promise<UsageByProviderModel[]> {

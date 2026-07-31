@@ -52,6 +52,18 @@ export interface RunTriggerInput {
   model: string;
 }
 
+export interface RecentRun {
+  runId: string;
+  status: string;
+  trigger: string;
+  startedAt: string;
+  finishedAt: string | null;
+  suiteId: string | null;
+  suiteName: string | null;
+  projectId: string | null;
+  projectName: string | null;
+}
+
 export const api = {
   assistants: {
     list: () => request<AssistantSummary[]>("/api/assistants"),
@@ -103,5 +115,6 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    recent: (limit = 10) => request<RecentRun[]>(`/api/runs/recent?limit=${limit}`),
   },
 };

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Project, Run, RunMode, ServerMessage, StepLog, Suite } from "@sentinel/shared";
-import { api, backendHttpUrl, backendWsUrl } from "./api/client";
+import { api, backendHttpUrl, backendWsUrl, type RecentRun } from "./api/client";
 import { useBackendSocket, type SocketConnectionState } from "./ws/useBackendSocket";
+import { DashboardView } from "./views/DashboardView";
 import { ProjectsView } from "./views/ProjectsView";
 import { SuitesView } from "./views/SuitesView";
 import { SuiteDetailView } from "./views/SuiteDetailView";
 import { SettingsView } from "./views/SettingsView";
 import type { PendingPrompt } from "./components/RunTicker";
 
-type View = "projects" | "suites" | "suite-detail" | "settings";
+type View = "dashboard" | "projects" | "suites" | "suite-detail" | "settings";
 type HealthState = "checking" | "connected" | "unreachable";
 type DotState = "ok" | "pending" | "bad";
 
@@ -29,7 +30,7 @@ function connectionDotState(state: SocketConnectionState): DotState {
 }
 
 export function App(): JSX.Element {
-  const [view, setView] = useState<View>("projects");
+  const [view, setView] = useState<View>("dashboard");
   const [project, setProject] = useState<Project | null>(null);
   const [suite, setSuite] = useState<Suite | null>(null);
 
@@ -102,7 +103,31 @@ export function App(): JSX.Element {
     });
   }
 
+  async function handleOpenRecentRun(recent: RecentRun): Promise<void> {
+    if (!recent.projectId || !recent.suiteId) return;
+    try {
+      const projects = await api.projects.list();
+      const foundProject = projects.find((candidate) => candidate.id === recent.projectId);
+      if (!foundProject) return;
+      const suites = await api.suites.listByProject(foundProject.id);
+      const foundSuite = suites.find((candidate) => candidate.id === recent.suiteId);
+      if (!foundSuite) return;
+      setProject(foundProject);
+      setSuite(foundSuite);
+      setView("suite-detail");
+    } catch (err) {
+      console.error("Failed to open recent run:", err);
+    }
+  }
+
   const onProjectsTab = view === "projects" || view === "suites" || view === "suite-detail";
+
+  const breadcrumb: string[] = ["Sentinel"];
+  if (view === "dashboard") breadcrumb.push("Dashboard");
+  if (onProjectsTab) breadcrumb.push("Projects");
+  if (view === "suites" && project) breadcrumb.push(project.name);
+  if (view === "suite-detail" && project && suite) breadcrumb.push(project.name, suite.name);
+  if (view === "settings") breadcrumb.push("Settings");
 
   return (
     <div className="app-shell">
@@ -113,6 +138,13 @@ export function App(): JSX.Element {
         </div>
 
         <nav className="sidebar-nav">
+          <button
+            type="button"
+            className={`nav-item${view === "dashboard" ? " active" : ""}`}
+            onClick={() => setView("dashboard")}
+          >
+            <span className="nav-item-icon">⌂</span> Dashboard
+          </button>
           <button
             type="button"
             className={`nav-item${onProjectsTab ? " active" : ""}`}
@@ -137,11 +169,29 @@ export function App(): JSX.Element {
             <span className={statusDotClass(connectionDotState(connectionState))} /> Live updates{" "}
             {connectionState}
           </div>
+          <div className="sidebar-meta">
+            <span>v{__APP_VERSION__}</span>
+            <span className="sidebar-meta-sep">·</span>
+            <span>⌘K for commands</span>
+          </div>
         </div>
       </aside>
 
       <main className="main-content">
+        <div className="breadcrumb-bar">
+          {breadcrumb.map((crumb, index) => (
+            <span key={`${crumb}-${index}`} className="breadcrumb-item">
+              {index > 0 && <span className="breadcrumb-sep">/</span>}
+              {crumb}
+            </span>
+          ))}
+        </div>
+
         <div className="content-container">
+          {view === "dashboard" && (
+            <DashboardView onGoToProjects={() => setView("projects")} onSelectRecentRun={handleOpenRecentRun} />
+          )}
+
           {view === "projects" && (
             <ProjectsView
               onSelectProject={(selected) => {

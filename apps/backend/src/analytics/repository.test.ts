@@ -94,6 +94,25 @@ describe("AnalyticsRepository", () => {
     expect(heatmap[0]?.failCount).toBe(1);
   });
 
+  it("recentRuns returns runs newest-first with suite/project names attached", async () => {
+    await createRun("passed", "pass", new Date("2026-01-01T00:00:00Z"));
+    await createRun("failed", "fail", new Date("2026-01-02T00:00:00Z"));
+
+    const recent = await repo.recentRuns(10);
+    expect(recent).toHaveLength(2);
+    expect(recent[0]?.status).toBe("failed");
+    expect(recent[0]?.suiteName).toBe("Checkout");
+    expect(recent[0]?.projectName).toBe("SoundWave");
+  });
+
+  it("recentRuns respects the limit across many runs", async () => {
+    for (let i = 0; i < 5; i += 1) {
+      await createRun("passed", "pass", new Date(2026, 0, i + 1));
+    }
+    const recent = await repo.recentRuns(3);
+    expect(recent).toHaveLength(3);
+  });
+
   it("usageBySuite sums tokens per provider/model and leaves cost null with no rate", async () => {
     const runId = await createRun("passed", "pass", new Date("2026-01-01T00:00:00Z"));
     await prisma.providerUsage.create({
