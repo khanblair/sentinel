@@ -1,4 +1,4 @@
-import type { Environment, Project, Provider, RunMode, ScheduleType, Suite, TestCase } from "@sentinel/shared";
+import type { Environment, Project, Provider, Rule, RunMode, ScheduleType, Skill, Suite, TestCase } from "@sentinel/shared";
 
 const FALLBACK_BACKEND_URL = "http://127.0.0.1:4317";
 
@@ -187,6 +187,19 @@ export const api = {
         body: JSON.stringify(input),
       }),
     remove: (id: string) => request<void>(`/api/environments/${id}`, { method: "DELETE" }),
+  },
+  rules: {
+    listGlobal: () => request<Rule[]>("/api/rules"),
+    listByProject: (projectId: string) => request<Rule[]>(`/api/projects/${projectId}/rules`),
+    create: (input: { scope: "global" | "project"; projectId?: string | null; text: string }) =>
+      request<Rule>("/api/rules", { method: "POST", body: JSON.stringify(input) }),
+    remove: (id: string) => request<void>(`/api/rules/${id}`, { method: "DELETE" }),
+  },
+  skills: {
+    list: () => request<Skill[]>("/api/skills"),
+    create: (input: { name: string; definition: string }) =>
+      request<Skill>("/api/skills", { method: "POST", body: JSON.stringify(input) }),
+    remove: (id: string) => request<void>(`/api/skills/${id}`, { method: "DELETE" }),
   },
   providerConfigs: {
     list: () => request<ProviderConfigSummary[]>("/api/provider-configs"),

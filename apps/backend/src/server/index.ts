@@ -7,6 +7,7 @@ import { applyPendingMigrations } from "../db/applyMigrations.js";
 import { createPrismaClient } from "../db/client.js";
 import { ProviderConfigRepository } from "../db/repositories/providerConfigRepository.js";
 import { seedBuiltInAssistants } from "../db/seedAssistants.js";
+import { seedBuiltInSkills } from "../db/seedSkills.js";
 import { fullAutoResolver } from "../executionLoop/confirmation.js";
 import { runSuite } from "../orchestrator/runSuite.js";
 import { createProviderAdapter } from "../providers/aiSdkProvider.js";
@@ -60,6 +61,7 @@ async function main(): Promise<void> {
     : join(process.cwd(), "prisma", "migrations");
   await applyPendingMigrations(prisma, migrationsDir);
   await seedBuiltInAssistants(prisma);
+  await seedBuiltInSkills(prisma);
 
   // The WebSocketServer can't be constructed until after `app.listen()` gives us
   // `app.server`, but routes need a `broadcast` function to close over *before*

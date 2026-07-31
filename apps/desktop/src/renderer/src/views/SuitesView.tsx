@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Environment, Project, Suite } from "@sentinel/shared";
+import type { Environment, Project, Rule, Suite } from "@sentinel/shared";
 import { api, type ModuleRisk } from "../api/client";
 
 export interface SuitesViewProps {
@@ -20,16 +20,21 @@ export function SuitesView({ project, onBack, onSelectSuite }: SuitesViewProps):
 
   const [heatmap, setHeatmap] = useState<ModuleRisk[]>([]);
 
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [ruleText, setRuleText] = useState("");
+
   async function refresh(): Promise<void> {
     try {
-      const [suiteList, envList, heatmapData] = await Promise.all([
+      const [suiteList, envList, heatmapData, ruleList] = await Promise.all([
         api.suites.listByProject(project.id),
         api.environments.listByProject(project.id),
         api.analytics.heatmap(project.id),
+        api.rules.listByProject(project.id),
       ]);
       setSuites(suiteList);
       setEnvironments(envList);
       setHeatmap(heatmapData);
+      setRules(ruleList);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -90,6 +95,28 @@ export function SuitesView({ project, onBack, onSelectSuite }: SuitesViewProps):
   async function handleDeleteEnvironment(id: string): Promise<void> {
     try {
       await api.environments.remove(id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleAddRule(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (!ruleText.trim()) return;
+    setError(null);
+    try {
+      await api.rules.create({ scope: "project", projectId: project.id, text: ruleText });
+      setRuleText("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleDeleteRule(id: string): Promise<void> {
+    try {
+      await api.rules.remove(id);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -178,6 +205,38 @@ export function SuitesView({ project, onBack, onSelectSuite }: SuitesViewProps):
         />
         <button type="submit" className="btn btn-primary">
           Add environment
+        </button>
+      </form>
+
+      <h3>Project rules</h3>
+      <p className="item-subtext">Standing instructions applied to sessions within this project only.</p>
+      <ul className="item-list">
+        {rules.map((rule) => (
+          <li key={rule.id} className="item-row">
+            <div className="item-row-main">
+              <span className="item-title-btn item-title-static">{rule.text}</span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-sm btn-danger"
+              onClick={() => void handleDeleteRule(rule.id)}
+              aria-label={`Remove rule: ${rule.text}`}
+            >
+              Remove
+            </button>
+          </li>
+        ))}
+        {rules.length === 0 && <li className="empty-state">No project rules yet.</li>}
+      </ul>
+      <form className="field-row" onSubmit={(event) => void handleAddRule(event)}>
+        <input
+          value={ruleText}
+          onChange={(event) => setRuleText(event.target.value)}
+          placeholder="e.g. This site's nav collapses below 768px — expected, not a bug"
+          aria-label="New project rule"
+        />
+        <button type="submit" className="btn btn-primary">
+          Add rule
         </button>
       </form>
 
