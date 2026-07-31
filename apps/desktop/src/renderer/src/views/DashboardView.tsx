@@ -28,15 +28,21 @@ function timeAgo(iso: string): string {
 export function DashboardView({ onGoToProjects, onSelectRecentRun }: DashboardViewProps): JSX.Element {
   const [projects, setProjects] = useState<Project[]>([]);
   const [recentRuns, setRecentRuns] = useState<RecentRun[]>([]);
+  const [runCount, setRunCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load(): Promise<void> {
       try {
-        const [projectList, runs] = await Promise.all([api.projects.list(), api.runs.recent(8)]);
+        const [projectList, runs, runTotal] = await Promise.all([
+          api.projects.list(),
+          api.runs.recent(8),
+          api.runs.count(),
+        ]);
         setProjects(projectList);
         setRecentRuns(runs);
+        setRunCount(runTotal.count);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -57,8 +63,8 @@ export function DashboardView({ onGoToProjects, onSelectRecentRun }: DashboardVi
           <span className="stat-label">Projects</span>
         </div>
         <div className="stat-card">
-          <span className="stat-value">{recentRuns.length}</span>
-          <span className="stat-label">Recent runs</span>
+          <span className="stat-value">{runCount ?? "—"}</span>
+          <span className="stat-label">Total runs</span>
         </div>
         <button type="button" className="btn btn-primary stat-cta" onClick={onGoToProjects}>
           + New project

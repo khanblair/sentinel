@@ -116,5 +116,6 @@ export const api = {
         body: JSON.stringify(input),
       }),
     recent: (limit = 10) => request<RecentRun[]>(`/api/runs/recent?limit=${limit}`),
+    count: () => request<{ count: number }>("/api/runs/count"),
   },
 };

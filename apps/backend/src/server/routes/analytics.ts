@@ -7,6 +7,8 @@ export function registerAnalyticsRoutes(app: FastifyInstance, repo: AnalyticsRep
     return reply.send(await repo.recentRuns(limit && Number.isFinite(limit) ? limit : undefined));
   });
 
+  app.get("/api/runs/count", async (_request, reply) => reply.send({ count: await repo.totalRunCount() }));
+
   app.get<{ Params: { suiteId: string } }>(
     "/api/suites/:suiteId/analytics/trend",
     async (request, reply) => reply.send(await repo.passFailTrend(request.params.suiteId)),

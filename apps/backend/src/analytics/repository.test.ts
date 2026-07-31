@@ -113,6 +113,13 @@ describe("AnalyticsRepository", () => {
     expect(recent).toHaveLength(3);
   });
 
+  it("totalRunCount counts every run regardless of the recentRuns limit", async () => {
+    for (let i = 0; i < 5; i += 1) {
+      await createRun("passed", "pass", new Date(2026, 0, i + 1));
+    }
+    await expect(repo.totalRunCount()).resolves.toBe(5);
+  });
+
   it("usageBySuite sums tokens per provider/model and leaves cost null with no rate", async () => {
     const runId = await createRun("passed", "pass", new Date("2026-01-01T00:00:00Z"));
     await prisma.providerUsage.create({

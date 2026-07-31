@@ -140,6 +140,10 @@ export class AnalyticsRepository {
     }));
   }
 
+  async totalRunCount(): Promise<number> {
+    return this.prisma.run.count();
+  }
+
   async usageBySuite(suiteId: string): Promise<UsageByProviderModel[]> {
     const rows = await this.prisma.providerUsage.groupBy({
       by: ["provider", "model"],

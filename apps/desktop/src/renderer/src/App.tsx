@@ -171,8 +171,6 @@ export function App(): JSX.Element {
           </div>
           <div className="sidebar-meta">
             <span>v{__APP_VERSION__}</span>
-            <span className="sidebar-meta-sep">·</span>
-            <span>⌘K for commands</span>
           </div>
         </div>
       </aside>
