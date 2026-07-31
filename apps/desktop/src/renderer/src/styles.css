@@ -577,6 +577,32 @@ select {
   font-weight: 500;
 }
 
+.report-actions {
+  margin-top: 14px;
+}
+
+.report-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* ---------- Trend strip ---------- */
+
+.trend-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
 /* ---------- Alerts ---------- */
 
 [role="alert"] {

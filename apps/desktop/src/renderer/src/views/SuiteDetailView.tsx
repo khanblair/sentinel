@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import type { Environment, Run, RunMode, StepLog, Suite, TestCase } from "@sentinel/shared";
 import { api, type AssistantSummary, type ProviderConfigSummary } from "../api/client";
 import { RunTicker, type PendingPrompt } from "../components/RunTicker";
+import { RunHistoryPanel } from "../components/RunHistoryPanel";
+import { AnalyticsPanel } from "../components/AnalyticsPanel";
+import { ScheduledJobsPanel } from "../components/ScheduledJobsPanel";
 
 export interface SuiteDetailViewProps {
   suite: Suite;
@@ -83,6 +86,24 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
     }
   }
 
+  async function handleArchiveTestCase(id: string): Promise<void> {
+    try {
+      await api.testCases.archive(id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleCloneTestCase(id: string): Promise<void> {
+    try {
+      await api.testCases.clone(id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   function handleTriggerRun(): void {
     if (!assistantId.trim() || !providerConfigId || !model.trim()) {
       setError("Assistant id, provider config, and model are all required to run.");
@@ -113,6 +134,18 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
             <div className="item-row-main">
               <span className="item-title-btn item-title-static">{testCase.title}</span>
               <span className="item-subtext">{testCase.urlPath}</span>
+            </div>
+            <div className="field-row">
+              <button type="button" className="btn btn-sm" onClick={() => void handleCloneTestCase(testCase.id)}>
+                Clone
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={() => void handleArchiveTestCase(testCase.id)}
+              >
+                Archive
+              </button>
             </div>
           </li>
         ))}
@@ -179,6 +212,15 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
         steps={activeRunSteps}
         pendingPrompt={pendingPrompt}
         onAnswerPrompt={onAnswerPrompt}
+      />
+
+      <RunHistoryPanel suiteId={suite.id} />
+      <AnalyticsPanel suiteId={suite.id} />
+      <ScheduledJobsPanel
+        suiteId={suite.id}
+        assistants={assistants}
+        environments={environments}
+        providerConfigs={providerConfigs}
       />
     </section>
   );

@@ -1,4 +1,4 @@
-import type { Environment, Project, Provider, RunMode, Suite, TestCase } from "@sentinel/shared";
+import type { Environment, Project, Provider, RunMode, ScheduleType, Suite, TestCase } from "@sentinel/shared";
 
 const FALLBACK_BACKEND_URL = "http://127.0.0.1:4317";
 
@@ -64,6 +64,82 @@ export interface RecentRun {
   projectName: string | null;
 }
 
+export interface RunStepDetail {
+  id: string;
+  stepIndex: number;
+  testCaseId: string | null;
+  toolCall: Record<string, unknown>;
+  observation: string;
+  verdict: string;
+  confidence: number;
+  confidenceReason: string;
+}
+
+export interface RunDetail {
+  runId: string;
+  status: string;
+  trigger: string;
+  startedAt: string;
+  finishedAt: string | null;
+  suiteId: string | null;
+  suiteName: string | null;
+  steps: RunStepDetail[];
+}
+
+export interface RunTrendPoint {
+  runId: string;
+  status: string;
+  trigger: string;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface FlakyCase {
+  testCaseId: string;
+  flipCount: number;
+  recentVerdicts: string[];
+}
+
+export interface UsageByProviderModel {
+  provider: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  estimatedCostUsd: number | null;
+  runCount: number;
+}
+
+export interface ModuleRisk {
+  module: string;
+  subModule: string | null;
+  total: number;
+  failCount: number;
+  failRate: number;
+}
+
+export interface ScheduledJob {
+  id: string;
+  suiteId: string | null;
+  scheduleType: ScheduleType;
+  scheduleExpression: string;
+  timezone: string;
+  mode: RunMode;
+  nextRunAt: string;
+  lastRunAt: string | null;
+  isActive: boolean;
+}
+
+export interface ScheduledJobInput {
+  scheduleType: ScheduleType;
+  scheduleExpression: string;
+  timezone?: string;
+  mode?: RunMode;
+  assistantId: string;
+  providerConfigId: string;
+  model: string;
+  environmentId?: string | null;
+}
+
 export const api = {
   assistants: {
     list: () => request<AssistantSummary[]>("/api/assistants"),
@@ -78,6 +154,8 @@ export const api = {
     listByProject: (projectId: string) => request<Suite[]>(`/api/projects/${projectId}/suites`),
     create: (projectId: string, input: { name: string; description?: string | null }) =>
       request<Suite>(`/api/projects/${projectId}/suites`, { method: "POST", body: JSON.stringify(input) }),
+    archive: (id: string) => request<Suite>(`/api/suites/${id}/archive`, { method: "POST" }),
+    clone: (id: string) => request<Suite>(`/api/suites/${id}/clone`, { method: "POST" }),
   },
   testCases: {
     listBySuite: (suiteId: string) => request<TestCase[]>(`/api/suites/${suiteId}/test-cases`),
@@ -94,6 +172,7 @@ export const api = {
       },
     ) => request<TestCase>(`/api/suites/${suiteId}/test-cases`, { method: "POST", body: JSON.stringify(input) }),
     archive: (id: string) => request<TestCase>(`/api/test-cases/${id}/archive`, { method: "POST" }),
+    clone: (id: string) => request<TestCase>(`/api/test-cases/${id}/clone`, { method: "POST" }),
   },
   environments: {
     listByProject: (projectId: string) => request<Environment[]>(`/api/projects/${projectId}/environments`),
@@ -102,12 +181,24 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    remove: (id: string) => request<void>(`/api/environments/${id}`, { method: "DELETE" }),
   },
   providerConfigs: {
     list: () => request<ProviderConfigSummary[]>("/api/provider-configs"),
     create: (input: { provider: Provider; apiKey: string; label?: string | null }) =>
       request<ProviderConfigSummary>("/api/provider-configs", { method: "POST", body: JSON.stringify(input) }),
     remove: (id: string) => request<void>(`/api/provider-configs/${id}`, { method: "DELETE" }),
+  },
+  scheduledJobs: {
+    listBySuite: (suiteId: string) => request<ScheduledJob[]>(`/api/suites/${suiteId}/scheduled-jobs`),
+    create: (suiteId: string, input: ScheduledJobInput) =>
+      request<ScheduledJob>(`/api/suites/${suiteId}/scheduled-jobs`, { method: "POST", body: JSON.stringify(input) }),
+    setActive: (id: string, isActive: boolean) =>
+      request<ScheduledJob>(`/api/scheduled-jobs/${id}/active`, {
+        method: "POST",
+        body: JSON.stringify({ isActive }),
+      }),
+    remove: (id: string) => request<void>(`/api/scheduled-jobs/${id}`, { method: "DELETE" }),
   },
   runs: {
     trigger: (suiteId: string, input: RunTriggerInput) =>
@@ -117,5 +208,21 @@ export const api = {
       }),
     recent: (limit = 10) => request<RecentRun[]>(`/api/runs/recent?limit=${limit}`),
     count: () => request<{ count: number }>("/api/runs/count"),
+    historyForSuite: (suiteId: string) => request<RecentRun[]>(`/api/suites/${suiteId}/runs`),
+    detail: (runId: string) => request<RunDetail>(`/api/runs/${runId}`),
+    report: async (runId: string, format: "markdown" | "csv"): Promise<string> => {
+      const response = await fetch(`${backendHttpUrl()}/api/runs/${runId}/report?format=${format}`);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as ApiErrorBody;
+        throw new Error(body.message ?? `Request failed with status ${response.status}`);
+      }
+      return response.text();
+    },
+  },
+  analytics: {
+    trend: (suiteId: string) => request<RunTrendPoint[]>(`/api/suites/${suiteId}/analytics/trend`),
+    flakyCases: (suiteId: string) => request<FlakyCase[]>(`/api/suites/${suiteId}/analytics/flaky-cases`),
+    usage: (suiteId: string) => request<UsageByProviderModel[]>(`/api/suites/${suiteId}/analytics/usage`),
+    heatmap: (projectId: string) => request<ModuleRisk[]>(`/api/projects/${projectId}/analytics/heatmap`),
   },
 };

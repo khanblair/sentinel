@@ -38,6 +38,28 @@ export interface RecentRun {
   projectName: string | null;
 }
 
+export interface RunStepDetail {
+  id: string;
+  stepIndex: number;
+  testCaseId: string | null;
+  toolCall: Record<string, unknown>;
+  observation: string;
+  verdict: string;
+  confidence: number;
+  confidenceReason: string;
+}
+
+export interface RunDetail {
+  runId: string;
+  status: string;
+  trigger: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  suiteId: string | null;
+  suiteName: string | null;
+  steps: RunStepDetail[];
+}
+
 /** Read-only aggregation over Run/StepLog/ProviderUsage (design §5.10) — everything
  * here reads from data written by runSuite (Phase 4a's usage plumbing, Phase 3b's
  * Run/StepLog persistence); nothing in this file writes anything. */
@@ -142,6 +164,84 @@ export class AnalyticsRepository {
 
   async totalRunCount(): Promise<number> {
     return this.prisma.run.count();
+  }
+
+  /** Suite-scoped run history for browsing past runs (distinct from passFailTrend,
+   * which is shaped for the trend chart and ordered oldest-first). */
+  async runsBySuite(suiteId: string): Promise<RecentRun[]> {
+    const runs = await this.prisma.run.findMany({
+      where: { suiteId },
+      orderBy: { startedAt: "desc" },
+      select: {
+        id: true,
+        status: true,
+        trigger: true,
+        startedAt: true,
+        finishedAt: true,
+        suite: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
+      },
+    });
+    return runs.map((run) => ({
+      runId: run.id,
+      status: run.status,
+      trigger: run.trigger,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      suiteId: run.suite?.id ?? null,
+      suiteName: run.suite?.name ?? null,
+      projectId: run.suite?.project.id ?? null,
+      projectName: run.suite?.project.name ?? null,
+    }));
+  }
+
+  async runDetail(runId: string): Promise<RunDetail | null> {
+    const run = await this.prisma.run.findUnique({
+      where: { id: runId },
+      select: {
+        id: true,
+        status: true,
+        trigger: true,
+        startedAt: true,
+        finishedAt: true,
+        suite: { select: { id: true, name: true } },
+      },
+    });
+    if (!run) return null;
+
+    const stepLogs = await this.prisma.stepLog.findMany({
+      where: { runId },
+      orderBy: { stepIndex: "asc" },
+      select: {
+        id: true,
+        stepIndex: true,
+        testCaseId: true,
+        toolCall: true,
+        observation: true,
+        verdict: true,
+        confidence: true,
+        confidenceReason: true,
+      },
+    });
+
+    return {
+      runId: run.id,
+      status: run.status,
+      trigger: run.trigger,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      suiteId: run.suite?.id ?? null,
+      suiteName: run.suite?.name ?? null,
+      steps: stepLogs.map((log) => ({
+        id: log.id,
+        stepIndex: log.stepIndex,
+        testCaseId: log.testCaseId,
+        toolCall: JSON.parse(log.toolCall) as Record<string, unknown>,
+        observation: log.observation,
+        verdict: log.verdict,
+        confidence: log.confidence,
+        confidenceReason: log.confidenceReason,
+      })),
+    };
   }
 
   async usageBySuite(suiteId: string): Promise<UsageByProviderModel[]> {

@@ -120,6 +120,32 @@ describe("AnalyticsRepository", () => {
     await expect(repo.totalRunCount()).resolves.toBe(5);
   });
 
+  it("runsBySuite returns only that suite's runs, newest-first", async () => {
+    const otherSuite = await new SuiteRepository(prisma).create({ projectId, name: "Other" });
+    await prisma.run.create({
+      data: { suiteId: otherSuite.id, assistantId, status: "passed", startedAt: new Date("2026-01-01T00:00:00Z") },
+    });
+    await createRun("passed", "pass", new Date("2026-01-01T00:00:00Z"));
+    await createRun("failed", "fail", new Date("2026-01-02T00:00:00Z"));
+
+    const history = await repo.runsBySuite(suite.id);
+    expect(history).toHaveLength(2);
+    expect(history[0]?.status).toBe("failed");
+    expect(history.every((run) => run.suiteId === suite.id)).toBe(true);
+  });
+
+  it("runDetail returns run metadata with ordered steps, or null when missing", async () => {
+    const runId = await createRun("passed", "pass", new Date("2026-01-01T00:00:00Z"));
+
+    const detail = await repo.runDetail(runId);
+    expect(detail?.suiteName).toBe("Checkout");
+    expect(detail?.steps).toHaveLength(1);
+    expect(detail?.steps[0]?.verdict).toBe("pass");
+    expect(detail?.steps[0]?.toolCall).toEqual({});
+
+    await expect(repo.runDetail("missing-run-id")).resolves.toBeNull();
+  });
+
   it("usageBySuite sums tokens per provider/model and leaves cost null with no rate", async () => {
     const runId = await createRun("passed", "pass", new Date("2026-01-01T00:00:00Z"));
     await prisma.providerUsage.create({
