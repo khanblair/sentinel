@@ -373,6 +373,30 @@ ul {
   font-family: var(--font-mono, monospace);
 }
 
+.preview-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.preview-viewport-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.preview-action-warning {
+  display: block;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-muted);
+  color: var(--warning);
+  font-size: 11px;
+}
+
 .preview-frame-wrap {
   flex: 1;
   display: flex;

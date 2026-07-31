@@ -62,7 +62,9 @@ export function App(): JSX.Element {
   );
   const [previewFrame, setPreviewFrame] = useState<PreviewFrame | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewActionWarning, setPreviewActionWarning] = useState<string | null>(null);
   const watchedRunIdRef = useRef<string | null>(null);
+  const previewWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,6 +125,13 @@ export function App(): JSX.Element {
         break;
       case "preview:url":
         setPreviewUrl(message.url);
+        break;
+      case "preview:action-result":
+        if (!message.ok && message.reason) {
+          setPreviewActionWarning(message.reason);
+          if (previewWarningTimerRef.current) clearTimeout(previewWarningTimerRef.current);
+          previewWarningTimerRef.current = setTimeout(() => setPreviewActionWarning(null), 4000);
+        }
         break;
       case "error":
         console.error("Backend WS error:", message.message);
@@ -398,8 +407,11 @@ export function App(): JSX.Element {
               <div className="preview-dock-panel" style={{ width: previewWidth }}>
                 <PreviewPanel
                   active={activeRun?.status === "running"}
+                  runId={activeRun?.status === "running" ? activeRun.id : null}
                   frame={previewFrame}
                   url={previewUrl}
+                  actionWarning={previewActionWarning}
+                  send={send}
                 />
               </div>
             </>

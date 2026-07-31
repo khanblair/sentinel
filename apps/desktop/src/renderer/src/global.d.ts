@@ -1,5 +1,6 @@
 export interface SentinelApi {
   getBackendUrl: () => string;
+  openExternal: (url: string) => Promise<void>;
 }
 
 declare global {

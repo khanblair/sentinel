@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "node:path";
 import { type ChildProcess, spawn } from "node:child_process";
 
@@ -59,6 +59,18 @@ function createWindow(): void {
     void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
   }
 }
+
+// Live preview's "open in browser" (design §5.4) — only ever the URL the automation
+// is actually looking at, but validated anyway: renderer-supplied strings should
+// never reach shell.openExternal unchecked, since a non-http(s) scheme (file://, or
+// an OS-specific handler URL) could do more than open a browser tab.
+ipcMain.handle("preview:open-external", (_event, url: string) => {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Refusing to open non-http(s) URL: ${url}`);
+  }
+  return shell.openExternal(url);
+});
 
 app.whenReady().then(() => {
   process.env.SENTINEL_BACKEND_URL = BACKEND_HTTP_URL;
