@@ -417,6 +417,46 @@ ul {
   align-self: center;
 }
 
+.preview-frame-image-selectable {
+  cursor: crosshair;
+}
+
+.preview-panel-toolbar .btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.preview-selected-element {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.preview-element-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.preview-element-summary dt {
+  color: var(--text-muted);
+}
+
+.preview-element-summary dd {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.preview-element-summary code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+
 .breadcrumb-sep {
   margin-right: 6px;
   opacity: 0.5;

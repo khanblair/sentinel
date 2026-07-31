@@ -11,7 +11,7 @@ import { AdHocView } from "./views/AdHocView";
 import type { PendingPrompt } from "./components/RunTicker";
 import { CommandPalette } from "./components/CommandPalette";
 import { OnboardingModal } from "./components/OnboardingModal";
-import { PreviewPanel, type PreviewFrame } from "./components/PreviewPanel";
+import { PreviewPanel, type PreviewFrame, type SelectedElementResult } from "./components/PreviewPanel";
 import { useTheme } from "./hooks/useTheme";
 import { notifyRunFinished, requestNotificationPermission } from "./notifications";
 
@@ -63,6 +63,7 @@ export function App(): JSX.Element {
   const [previewFrame, setPreviewFrame] = useState<PreviewFrame | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewActionWarning, setPreviewActionWarning] = useState<string | null>(null);
+  const [previewSelectedElement, setPreviewSelectedElement] = useState<SelectedElementResult | null>(null);
   const watchedRunIdRef = useRef<string | null>(null);
   const previewWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,6 +134,9 @@ export function App(): JSX.Element {
           previewWarningTimerRef.current = setTimeout(() => setPreviewActionWarning(null), 4000);
         }
         break;
+      case "preview:element":
+        setPreviewSelectedElement({ element: message.element, reason: message.reason });
+        break;
       case "error":
         console.error("Backend WS error:", message.message);
         break;
@@ -157,6 +161,7 @@ export function App(): JSX.Element {
     if (wantRunId) {
       setPreviewFrame(null);
       setPreviewUrl(null);
+      setPreviewSelectedElement(null);
       send({ type: "preview:start", runId: wantRunId });
     }
     watchedRunIdRef.current = wantRunId;
@@ -411,6 +416,8 @@ export function App(): JSX.Element {
                   frame={previewFrame}
                   url={previewUrl}
                   actionWarning={previewActionWarning}
+                  selectedElement={previewSelectedElement}
+                  onClearSelectedElement={() => setPreviewSelectedElement(null)}
                   send={send}
                 />
               </div>

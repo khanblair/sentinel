@@ -124,10 +124,14 @@ export class PlaywrightPage implements Page {
             : null;
         let selector = el.tagName.toLowerCase();
         if (el.id) selector += `#${el.id}`;
+        // innerText, not textContent: elementFromPoint on a click near the edge of
+        // real content can return <html> or <body> — an ancestor whose textContent
+        // includes every descendant text node, including raw <style>/<script> tag
+        // bodies. innerText reflects only rendered, visible text.
         return {
           selector,
           role: el.getAttribute("role") ?? el.tagName.toLowerCase(),
-          text: el.textContent?.trim().slice(0, 200) || null,
+          text: el.innerText?.trim().slice(0, 200) || null,
           ariaLabel: ariaLabel || null,
           checked,
         };
