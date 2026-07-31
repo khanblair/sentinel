@@ -7,6 +7,7 @@ import { FakePageFactory } from "../automation/fakePageFactory.js";
 import { fullAutoResolver } from "../executionLoop/confirmation.js";
 import { FakeProvider } from "../providers/fakeProvider.js";
 import { ProjectRepository } from "../db/repositories/projectRepository.js";
+import { RuleRepository } from "../db/repositories/ruleRepository.js";
 import { SuiteRepository } from "../db/repositories/suiteRepository.js";
 import { TestCaseRepository } from "../db/repositories/testCaseRepository.js";
 import { runSuite } from "./runSuite.js";
@@ -184,6 +185,58 @@ describe("runSuite", () => {
     expect(stepLogs).toHaveLength(2);
     expect(stepLogs[0]?.verdict).toBe("pass");
     expect(stepLogs[1]?.verdict).toBe("fail");
+  });
+
+  it("composes the active Assistant's persona and applicable Rules into every provider call's systemPrompt", async () => {
+    const { project, suite } = await seedSuiteWithOneCase(prisma);
+    const assistant = await prisma.assistant.create({
+      data: { name: "Careful Tester", systemPrompt: "You are an extremely careful tester.", isBuiltIn: false },
+    });
+    const ruleRepo = new RuleRepository(prisma);
+    await ruleRepo.create({ scope: "global", text: "Never submit real payment forms" });
+    await ruleRepo.create({ scope: "project", projectId: project.id, text: "This site's nav collapses below 768px" });
+
+    const provider = new FakeProvider().queueObject({
+      object: { steps: ["assert the total is reduced by 10%"] },
+      usage: { promptTokens: 5, completionTokens: 5 },
+    });
+    assertPassStep(provider, "the total line item read the discounted amount");
+
+    await runSuite({
+      prisma,
+      suiteId: suite.id,
+      assistantId: assistant.id,
+      mode: "interactive",
+      provider,
+      pageFactory: new FakePageFactory(),
+      resolveConfirmation: fullAutoResolver,
+      broadcast: () => {},
+    });
+
+    expect(provider.calls).toHaveLength(2); // checklist generation, then one step
+    for (const call of provider.calls) {
+      expect(call.systemPrompt).toContain("You are an extremely careful tester.");
+      expect(call.systemPrompt).toContain("Never submit real payment forms");
+      expect(call.systemPrompt).toContain("This site's nav collapses below 768px");
+    }
+  });
+
+  it("throws NotFoundError for an assistant that doesn't exist, without creating a Run", async () => {
+    const { suite } = await seedSuiteWithOneCase(prisma);
+    await expect(
+      runSuite({
+        prisma,
+        suiteId: suite.id,
+        assistantId: "does-not-exist",
+        mode: "interactive",
+        provider: new FakeProvider(),
+        pageFactory: new FakePageFactory(),
+        resolveConfirmation: fullAutoResolver,
+        broadcast: () => {},
+      }),
+    ).rejects.toThrow(NotFoundError);
+
+    expect(await prisma.run.count()).toBe(0);
   });
 
   it("throws NotFoundError for a suite that doesn't exist, without creating a Run", async () => {

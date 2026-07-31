@@ -3,6 +3,7 @@ import type { StepVerdict } from "@sentinel/shared";
 import type { Page } from "../automation/page.js";
 import { executeTool, isConfirmationToolCall, toolCallSchema, type ToolCall } from "../automation/tools.js";
 import type { ProviderAdapter, TokenUsage } from "../providers/types.js";
+import { withPersonaPrefix } from "../orchestrator/systemPrompt.js";
 import type { ConfirmationResolver } from "./confirmation.js";
 import { isRepeating, type TurnRecord } from "./stuckDetection.js";
 
@@ -31,6 +32,8 @@ export interface RunStepOptions {
    * Interactive mode — the caller decides, this loop never assumes. */
   resolveConfirmation: ConfirmationResolver;
   turnBudget?: number;
+  /** Composed Assistant persona + Rules (see orchestrator/systemPrompt.ts). */
+  personaPrefix?: string;
 }
 
 /**
@@ -47,10 +50,12 @@ export async function runStep(options: RunStepOptions): Promise<StepResult> {
 
   for (let turn = 0; turn < turnBudget; turn += 1) {
     const { object, usage: turnUsage } = await options.provider.generateObject({
-      systemPrompt:
+      systemPrompt: withPersonaPrefix(
+        options.personaPrefix,
         "You are executing one checklist step in a browser test via tool calls. Decide the single " +
-        "next tool call. Before calling assert_condition, explicitly cite the evidence you actually " +
-        "observed that supports the verdict you are about to reach.",
+          "next tool call. Before calling assert_condition, explicitly cite the evidence you actually " +
+          "observed that supports the verdict you are about to reach.",
+      ),
       prompt: buildPrompt(options.instruction, history),
       schema: nextActionSchema,
     });

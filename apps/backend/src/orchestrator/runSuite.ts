@@ -2,6 +2,7 @@ import type { PrismaClient, Run as PrismaRun, StepLog as PrismaStepLog, TestCase
 import type { Run, RunMode, ServerMessage, StepLog, StepVerdict } from "@sentinel/shared";
 import { estimateCostUsd } from "../analytics/cost.js";
 import { generateChecklistFromTestCase } from "../checklistGenerator/index.js";
+import { RuleRepository } from "../db/repositories/ruleRepository.js";
 import { NotFoundError } from "../errors.js";
 import { runStep, type StepResult } from "../executionLoop/actionLoop.js";
 import type { ConfirmationResolver } from "../executionLoop/confirmation.js";
@@ -9,6 +10,7 @@ import { generateRunInsights } from "../metacognition/insights.js";
 import { alwaysContinueResolver, shouldOfferEarlyStop, type RunPauseResolver } from "../metacognition/runPause.js";
 import type { ProviderAdapter, TokenUsage } from "../providers/types.js";
 import type { PageFactory } from "../automation/page.js";
+import { composePersonaAndRules } from "./systemPrompt.js";
 
 export interface RunSuiteOptions {
   prisma: PrismaClient;
@@ -117,20 +119,33 @@ interface ExecuteTestCaseParams {
   baseUrl: string;
   /** Shared across every test case in the run so StepLog.stepIndex is unique per Run. */
   stepIndexCounter: { value: number };
+  /** Composed Assistant persona + Rules (see orchestrator/systemPrompt.ts). */
+  personaPrefix: string;
 }
 
 /** One Test Case's checklist, start to finish: generate it, run each step, persist
  * a StepLog + broadcast it, stop at the first non-pass step. Pulled out of runSuite
  * to keep that function's branching (Insights, run-level pause) readable. */
 async function executeTestCase(params: ExecuteTestCaseParams): Promise<StepVerdict> {
-  const { prisma, runId, provider, pageFactory, resolveConfirmation, broadcast, testCase, baseUrl, stepIndexCounter } =
-    params;
+  const {
+    prisma,
+    runId,
+    provider,
+    pageFactory,
+    resolveConfirmation,
+    broadcast,
+    testCase,
+    baseUrl,
+    stepIndexCounter,
+    personaPrefix,
+  } = params;
 
   const checklist = await generateChecklistFromTestCase({
     provider,
     urlPath: testCase.urlPath,
     steps: testCase.steps,
     expectedResult: testCase.expectedResult,
+    personaPrefix,
   });
   await recordUsage(prisma, runId, provider, checklist.usage);
 
@@ -138,7 +153,7 @@ async function executeTestCase(params: ExecuteTestCaseParams): Promise<StepVerdi
 
   let caseVerdict: StepVerdict = "pass";
   for (const instruction of checklist.steps) {
-    const result: StepResult = await runStep({ instruction, page, provider, resolveConfirmation });
+    const result: StepResult = await runStep({ instruction, page, provider, resolveConfirmation, personaPrefix });
     await recordUsage(prisma, runId, provider, result.usage);
 
     const stepLog = await prisma.stepLog.create({
@@ -210,6 +225,18 @@ export async function runSuite(options: RunSuiteOptions): Promise<Run> {
     throw new NotFoundError(`Suite ${suiteId} not found`);
   }
 
+  const assistant = await prisma.assistant.findUnique({ where: { id: assistantId } });
+  if (!assistant) {
+    throw new NotFoundError(`Assistant ${assistantId} not found`);
+  }
+  const ruleRepo = new RuleRepository(prisma);
+  const globalRules = await ruleRepo.listGlobal();
+  const projectRules = suite.projectId ? await ruleRepo.listByProject(suite.projectId) : [];
+  const personaPrefix = composePersonaAndRules(
+    assistant.systemPrompt,
+    [...globalRules, ...projectRules].map((rule) => rule.text),
+  );
+
   const environment = environmentId
     ? await prisma.environment.findUnique({ where: { id: environmentId } })
     : null;
@@ -250,6 +277,7 @@ export async function runSuite(options: RunSuiteOptions): Promise<Run> {
         testCase,
         baseUrl,
         stepIndexCounter,
+        personaPrefix,
       });
       overallVerdict = worstVerdict(overallVerdict, caseVerdict);
       caseVerdicts.push(caseVerdict);
