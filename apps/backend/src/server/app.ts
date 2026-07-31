@@ -26,6 +26,7 @@ import { registerRuleRoutes } from "./routes/rules.js";
 import { registerSkillRoutes } from "./routes/skills.js";
 import { registerAnalyticsRoutes } from "./routes/analytics.js";
 import { registerReportRoutes } from "./routes/reports.js";
+import { registerProjectBundleRoutes } from "./routes/projectBundle.js";
 
 export interface BuildAppOptions {
   prisma: PrismaClient;
@@ -74,6 +75,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerSkillRoutes(app, new SkillRepository(prisma));
   registerAnalyticsRoutes(app, new AnalyticsRepository(prisma));
   registerReportRoutes(app, prisma);
+  registerProjectBundleRoutes(app, prisma);
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);

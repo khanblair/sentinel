@@ -11,6 +11,8 @@ export function ProjectsView({ onSelectProject }: ProjectsViewProps): JSX.Elemen
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState<string | null>(null);
 
   async function refresh(): Promise<void> {
     try {
@@ -49,6 +51,43 @@ export function ProjectsView({ onSelectProject }: ProjectsViewProps): JSX.Elemen
     }
   }
 
+  function handleExport(project: Project): void {
+    setError(null);
+    api.projects
+      .exportBundle(project.id)
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${project.name.replace(/[^a-z0-9-_]+/gi, "-")}-sentinel-export.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  }
+
+  async function handleImport(event: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setError(null);
+    setImportSummary(null);
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const bundle: unknown = JSON.parse(text);
+      const summary = await api.projects.importBundle(bundle);
+      setImportSummary(
+        `Imported "${summary.projectName}" — ${summary.suiteCount} suite${summary.suiteCount === 1 ? "" : "s"}, ${summary.testCaseCount} test case${summary.testCaseCount === 1 ? "" : "s"}.`,
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <section>
       <h2>Projects</h2>
@@ -66,6 +105,14 @@ export function ProjectsView({ onSelectProject }: ProjectsViewProps): JSX.Elemen
                 </button>
                 {project.description && <span className="item-subtext">{project.description}</span>}
               </div>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => handleExport(project)}
+                aria-label={`Export ${project.name}`}
+              >
+                Export
+              </button>
               <button
                 type="button"
                 className="btn btn-danger btn-sm"
@@ -92,6 +139,22 @@ export function ProjectsView({ onSelectProject }: ProjectsViewProps): JSX.Elemen
           Create project
         </button>
       </form>
+
+      <div className="field-row">
+        <label className="btn btn-sm">
+          {importing ? "Importing…" : "Import bundle"}
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={(event) => void handleImport(event)}
+            disabled={importing}
+            className="visually-hidden-file-input"
+            aria-label="Import project bundle"
+          />
+        </label>
+        <span className="item-subtext">Creates a new project from a Sentinel export file.</span>
+      </div>
+      {importSummary && <p className="item-subtext">{importSummary}</p>}
     </section>
   );
 }

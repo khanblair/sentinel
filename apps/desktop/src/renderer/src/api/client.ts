@@ -155,6 +155,19 @@ export const api = {
     create: (input: { name: string; description?: string | null }) =>
       request<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
     remove: (id: string) => request<void>(`/api/projects/${id}`, { method: "DELETE" }),
+    exportBundle: async (id: string): Promise<Blob> => {
+      const response = await fetch(`${backendHttpUrl()}/api/projects/${id}/export`);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as ApiErrorBody;
+        throw new Error(body.message ?? `Request failed with status ${response.status}`);
+      }
+      return response.blob();
+    },
+    importBundle: (bundle: unknown) =>
+      request<{ projectId: string; projectName: string; suiteCount: number; testCaseCount: number }>(
+        "/api/projects/import",
+        { method: "POST", body: JSON.stringify(bundle) },
+      ),
   },
   suites: {
     listByProject: (projectId: string) => request<Suite[]>(`/api/projects/${projectId}/suites`),
