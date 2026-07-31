@@ -41,7 +41,10 @@ export interface ProviderConfigSummary {
 export interface AssistantSummary {
   id: string;
   name: string;
+  systemPrompt: string;
+  defaultSkills: string[];
   isBuiltIn: boolean;
+  projectId: string | null;
 }
 
 export interface RunTriggerInput {
@@ -143,6 +146,9 @@ export interface ScheduledJobInput {
 export const api = {
   assistants: {
     list: () => request<AssistantSummary[]>("/api/assistants"),
+    create: (input: { name: string; systemPrompt: string; defaultSkills?: string[]; projectId?: string | null }) =>
+      request<AssistantSummary>("/api/assistants", { method: "POST", body: JSON.stringify(input) }),
+    remove: (id: string) => request<void>(`/api/assistants/${id}`, { method: "DELETE" }),
   },
   projects: {
     list: () => request<Project[]>("/api/projects"),

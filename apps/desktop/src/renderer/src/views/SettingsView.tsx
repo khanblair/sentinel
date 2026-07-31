@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Provider, Rule, Skill } from "@sentinel/shared";
-import { api, type ProviderConfigSummary } from "../api/client";
+import { api, type AssistantSummary, type ProviderConfigSummary } from "../api/client";
 
 const PROVIDERS: Provider[] = ["claude", "deepseek", "gemini", "openai", "openrouter"];
 
@@ -21,16 +21,22 @@ export function SettingsView(): JSX.Element {
   const [skillName, setSkillName] = useState("");
   const [skillDefinition, setSkillDefinition] = useState("");
 
+  const [assistants, setAssistants] = useState<AssistantSummary[]>([]);
+  const [assistantName, setAssistantName] = useState("");
+  const [assistantPrompt, setAssistantPrompt] = useState("");
+
   async function refresh(): Promise<void> {
     try {
-      const [providerConfigs, globalRules, allSkills] = await Promise.all([
+      const [providerConfigs, globalRules, allSkills, allAssistants] = await Promise.all([
         api.providerConfigs.list(),
         api.rules.listGlobal(),
         api.skills.list(),
+        api.assistants.list(),
       ]);
       setConfigs(providerConfigs);
       setRules(globalRules);
       setSkills(allSkills);
+      setAssistants(allAssistants);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -116,6 +122,29 @@ export function SettingsView(): JSX.Element {
   async function handleDeleteSkill(id: string): Promise<void> {
     try {
       await api.skills.remove(id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleAddAssistant(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (!assistantName.trim() || !assistantPrompt.trim()) return;
+    setError(null);
+    try {
+      await api.assistants.create({ name: assistantName, systemPrompt: assistantPrompt });
+      setAssistantName("");
+      setAssistantPrompt("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleDeleteAssistant(id: string): Promise<void> {
+    try {
+      await api.assistants.remove(id);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -261,6 +290,49 @@ export function SettingsView(): JSX.Element {
         />
         <button type="submit" className="btn btn-primary">
           Add skill
+        </button>
+      </form>
+
+      <h3>Assistants</h3>
+      <p className="item-subtext">Personas an active run picks from. Built-ins can't be edited or removed here.</p>
+      <ul className="item-list">
+        {assistants.map((assistant) => (
+          <li key={assistant.id} className="item-row">
+            <div className="item-row-main">
+              <span className="item-title-btn item-title-static">
+                {assistant.name} {assistant.isBuiltIn && <span className="badge badge-neutral">built-in</span>}
+              </span>
+              <span className="item-subtext">{assistant.systemPrompt}</span>
+            </div>
+            {!assistant.isBuiltIn && (
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                onClick={() => void handleDeleteAssistant(assistant.id)}
+                aria-label={`Remove assistant ${assistant.name}`}
+              >
+                Remove
+              </button>
+            )}
+          </li>
+        ))}
+        {assistants.length === 0 && <li className="empty-state">No assistants yet.</li>}
+      </ul>
+      <form className="field-stack" onSubmit={(event) => void handleAddAssistant(event)}>
+        <input
+          value={assistantName}
+          onChange={(e) => setAssistantName(e.target.value)}
+          placeholder="Assistant name"
+          aria-label="New assistant name"
+        />
+        <textarea
+          value={assistantPrompt}
+          onChange={(e) => setAssistantPrompt(e.target.value)}
+          placeholder="System prompt / persona instructions"
+          aria-label="New assistant system prompt"
+        />
+        <button type="submit" className="btn btn-primary">
+          Add assistant
         </button>
       </form>
     </section>
