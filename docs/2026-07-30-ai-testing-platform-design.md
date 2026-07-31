@@ -1,6 +1,10 @@
 # Sentinel — AI-Driven Desktop Testing Platform — Design Spec
 
-**Status:** Brainstormed and approved by the user (2026-07-30). Not yet implemented.
+**Status:** Brainstormed and approved by the user (2026-07-30). Implemented — see §12
+for current, accurate status. Sections 1–11 below are the original approved design
+and are left largely as first written, for historical/rationale context; several have
+since been built differently than proposed there (§5.4 live preview in particular —
+read §12 before trusting that section's architecture description).
 **Name:** Sentinel.
 **Relationship to Testify:** This is a new, separate product — not an evolution of the `testify` Chrome extension in this repo. It reuses and evolves Testify's execution engine (checklist generation, action loop, judgment, run control, precondition/destructive/input confirmation gates), rehosted in a proper backend instead of an MV3 service worker. Testify itself is not being retired by this spec.
 
@@ -77,6 +81,11 @@ Ported and evolved from the existing Chrome extension's background logic:
 - No more service-worker lifecycle fighting — a long-running Node backend process replaces the MV3 service worker, so no keep-alive hacks, no 30s idle death, no state lost when a window closes.
 
 ### 5.4 Live preview
+> **Built differently than described below — see §12.** It's a *docked, resizable*
+> panel, the opposite of "no docked panel at all" (this section's original framing
+> was reacting to a Testify bug that doesn't apply here). Read §12 before relying on
+> this section for the actual architecture.
+
 - Real-time view of the actual browser executing the test, streamed via Chrome DevTools Protocol screencast (not an iframe — CSP frame-ancestors restrictions break iframe embedding on most real sites).
 - Runs in a dedicated, properly-sized Playwright-controlled browser instance — no viewport-collapse-from-a-docked-panel problem (the bug fixed in Testify) because there's no docked panel at all.
 
@@ -184,36 +193,131 @@ This mirrors Testify's existing shape (`RunSummary` / `TestCaseResult` / `StepLo
 - Multi-user auth/roles (irrelevant until the team-sharing phase in §10 is prioritized).
 - Detailed build/implementation sequencing (belongs to the implementation plan, not this design spec).
 
-## 12. Implementation status (as of this pass)
+## 12. Implementation status
 
-Everything in §5 is built except the two items below. Both were deliberately cut
-rather than half-built, after the rest of §5 (test management, ad-hoc chat testing,
-execution engine, Assistants, Rules, scheduling, provider management, analytics, and
-reporting including XLSX) shipped in full, along with §10's project export/import
-bundle and a `TestCase.linkedIssueUrl` field (store-and-render only, no issue-tracker
-API integration — see below).
+**This section is the authoritative source for what's actually built.** It's
+organized by the section numbers above. A status tag opens each line: **Built**,
+**Built, scoped down** (shipped, but narrower than the original bullet implied),
+**Built differently** (shipped, but not architected the way the section describes),
+or **Not built**.
 
-- **§5.4 Live preview.** Not built. This needs a CDP screencast channel streamed from
-  the backend's Playwright session into the Electron renderer — infrastructure that
-  doesn't exist yet on either side (no screencast plumbing in the backend, no preview
-  pane in the renderer) — and it can't be verified in this environment: every
-  automated check in this codebase runs against `FakePageFactory`/`FakePage` in tests
-  or a real Playwright browser driven headlessly by a verification script, never a
-  full Electron window. Shipping an unverifiable streaming feature was judged worse
-  than not shipping it. Revisit with a real Electron smoke-test environment available.
-- **§5.6 `visual-diff` Skill.** The Skill row is seeded (`seedSkills.ts`) and
-  selectable on Assistants, but nothing executes it — Skills in general are currently
-  a name registry only; none of them (built-in or custom) are folded into the actual
-  system prompt or given real tool implementations in the action loop (the same class
-  of gap that Assistant persona + Rules had until this pass fixed *that* one — see
-  `orchestrator/systemPrompt.ts`). Building real visual diffing needs, at minimum: a
-  `Page.screenshot()` method (`automation/page.ts` has none today), a baseline-image
-  storage model, a new tool-call type the LLM can invoke, and Skills becoming real
-  enough to gate which tools are available. That's a subsystem, not an increment —
-  deferred as its own future pass rather than partially wired in.
-- **Linked issue field**, by contrast, *is* built — but only the minimum §5.1 implies:
-  a user pastes a URL into `linkedIssueUrl` and it renders as a link. There is no
-  GitHub/Linear/Jira push integration (filing or updating a real issue from a failed
-  test case) — there's nowhere in the current data model to hold per-provider issue
-  tracker auth (`ProviderConfig` is specifically for AI provider keys), and building
-  that is a distinct, larger feature.
+### §4 User flow
+- 4.1 First launch — **Built.** A dismissible onboarding modal on first launch walks
+  through provider key / Global Rules / Assistants+Skills, matching this section.
+- 4.2 Home — **Built.** Dashboard (project/run counts, recent runs) + Projects list;
+  a Project's Suites, Environments, Rules, and analytics are all reachable from there.
+- 4.3 Structured testing — **Built**, including live preview (§5.4 — see there for
+  the real architecture, which differs from this section's description).
+- 4.4 Ad-hoc chat testing — **Built, scoped down.** The two-stage flow (generate
+  checklist → review/edit → run) is built, sharing live preview and the step ticker
+  with structured runs. **"Save this as a Suite?" is not built** — an ad-hoc run's
+  checklist cannot currently be converted into persisted Test Cases. A tester who
+  wants to keep an ad-hoc session's checklist has to re-create it by hand in a Suite.
+- 4.5 Assistants & Skills — **Built differently.** Assistants are fully built and do
+  what this section says (persona folded into every LLM call — `systemPrompt.ts`).
+  Skills are **not** — see the dedicated note under §5.6 below; the short version is
+  that Skills are a CRUD-managed name registry with no effect on agent behavior.
+- 4.6 Scheduling — **Built** as described, including the Full-Auto default for
+  scheduled runs and Interactive default for manual ones.
+- 4.7 Analytics — **Built** as described.
+
+### §5 Features
+- 5.1 Test management — **Built, scoped down.** Project → Suite → Test Case CRUD,
+  Environments, archive/clone, and CSV import are all built. **Not built**: XLSX
+  *import* (only XLSX *report export*, §5.11, exists — there's no XLSX parser for
+  bulk test-case add, only CSV), edit history (no audit trail — `TestCase` has only
+  `createdAt`/`updatedAt`), reference screenshot attachments (no file/blob field on
+  `TestCase` at all), and reordering test cases within a suite (no position/order
+  field or drag UI).
+- 5.2 Ad-hoc chat testing — **Built**, except "Save as Suite" — see 4.4 above.
+- 5.3 Execution engine — **Built** as described: checklist generation, the full
+  action-loop tool set, judgment, Stop Run/Skip Case, precondition/destructive/input
+  confirmation gates.
+- 5.4 Live preview — **Built, differently architected than this section describes.**
+  It is a **docked, resizable, toggleable panel** in the main Electron window — not a
+  separate non-docked window, which is what "no docked panel at all" (this section's
+  original text) actually meant. The panel streams real CDP `Page.startScreencast`
+  JPEG frames from the backend's existing Playwright session over the same WebSocket
+  channel that already carries `run:update`/`run:step`, into an `<img>`, watch-only.
+  Chosen over an embedded Electron `WebContentsView` + `connectOverCDP` design
+  specifically to avoid opening a CDP debug port on the whole Electron app. Four
+  toolbar features beyond bare screencast: **open in browser** (validated http(s)-only
+  IPC to `shell.openExternal`), a **viewport/device size preset selector**
+  (Desktop/Tablet/Mobile), and **select-element** (click-to-inspect via
+  `document.elementFromPoint`, read-only — not a real click, since the automation's
+  own `click` tool already exists for that). A fourth feature discussed but **not
+  built**: **annotate** (draw on the frame) — deferred because it has no defined
+  consumer yet (attach to a StepLog as bug evidence? feed back into the agent's next
+  prompt mid-run? something else?) and building the drawing mechanic before deciding
+  where the annotation goes would be a half-finished feature by this codebase's own
+  standard. A correctness property worth knowing about: a mutating preview action
+  (viewport resize, select-element) is rejected with a clear reason whenever a step is
+  currently executing (`ws/previewController.ts`'s `beginStep`/`endStep` gate) — racing
+  a live `page.click()`/`waitForSelector()` from the preview could otherwise fabricate
+  a StepLog verdict that's actually a preview artifact, not a real test result.
+- 5.5 Assistants — **Built** as described.
+- 5.6 Skills — **Not built, beyond the registry.** The three built-in Skills are
+  seeded and selectable on an Assistant's `defaultSkills`, and full CRUD exists
+  (`routes/skills.ts`), but nothing reads `defaultSkills` anywhere in the orchestrator
+  or action loop — no Skill changes what tools are available or what the system prompt
+  says. This is the same class of gap Assistant persona + Rules had before an earlier
+  pass fixed *that* one (folding persona+Rules into every `generateObject` call — see
+  `systemPrompt.ts`). The `visual-diff` Skill specifically also needs a
+  `Page.screenshot()`-equivalent (now less far off than when this was last written —
+  `Page` already gained CDP screencast methods for live preview — but still no
+  baseline-image storage or diff logic) and a new tool-call type. Treat "a Skill is
+  toggled on" as decorative until this is built.
+- 5.7 Rules — **Built** as described (Global + Project, folded into the system prompt).
+- 5.8 Scheduling — **Built** as described, including the explicit no-catch-up-logic
+  choice (confirmed still true — the scheduler does plain `nextRunAt <= now` polling).
+- 5.9 AI provider management — **Built, and extended beyond this section.** API key
+  management for all five providers is built. What this section doesn't mention,
+  because it postdates the original design: the **Model** field on every run-trigger
+  form is a **live dropdown fetched from the provider's own API** (never a hardcoded
+  model list — see `providers/listModels.ts`), showing capability data (context
+  window, description, tool-call support) wherever a provider's API actually returns
+  it, with a manual-entry fallback if the fetch fails. This exists because a
+  hardcoded/guessed model name is exactly as likely to be wrong as a hand-typed one —
+  the original failure mode this feature was built to close. Relatedly: `generateObject`
+  (the structured-output call every checklist/step decision goes through) now retries
+  with prompt-injected JSON mode if a model rejects forced tool-calling — needed for
+  always-reasoning models (DeepSeek's reasoner-class, OpenAI's o-series), which the
+  default tool-calling mode fails against outright (`providers/aiSdkProvider.ts`).
+- 5.10 Analytics — **Built** as described.
+- 5.11 Reporting — **Built**, including XLSX export (Markdown/CSV/XLSX, all three).
+
+### §6 Loop engineering & metacognition
+**Built** as described: per-step stuck detection (`executionLoop/stuckDetection.ts`),
+confidence-carrying judgments, the automatic post-run Insights pass
+(`metacognition/insights.ts`), and agent-initiated run pause in Interactive mode
+(`metacognition/runPause.ts`).
+
+### §7 Architecture
+Matches as described — Electron + React renderer, Fastify + WebSocket backend,
+Playwright, SQLite/Prisma, Vercel AI SDK — with one addition: the backend's CDP
+session now also feeds the live-preview screencast, not just action-loop tool calls,
+exactly as this section anticipated ("Its CDP session feeds both the action-loop tool
+calls and the live-preview screencast") even though §5.4's own description of the
+*panel* itself (not the CDP usage) was wrong about being non-docked.
+
+### §8 Data model
+Matches as described — no tables were added or changed beyond this section's original
+list. (Live preview needed no schema changes: its state is in-memory only,
+`ws/previewController.ts`, scoped to the backend process's lifetime.)
+
+### §9 Error handling & reliability
+**Built** as described.
+
+### §10 Team sharing
+**Built, ahead of "deferred, not v1."** This section frames export/import as
+future-phase, but it shipped in this build: a Project (with its Suites, Test Cases,
+Environments, project-scoped Rules, and project-scoped custom Assistants) exports to a
+portable JSON bundle and imports into a brand-new Project on another machine.
+Deliberately excludes Runs/StepLogs/ScheduledJobs/ProviderConfigs — a `ProviderConfig`
+holds an API key encrypted under the *exporting* machine's local key, so it can never
+be part of a portable bundle, and anything hard-depending on one (a ScheduledJob, a
+Run) would import as a dangling reference. Real-time multi-user sync remains
+undesigned, as this section says.
+
+### §11 Out of scope
+Still accurate — nothing listed here has been built.
