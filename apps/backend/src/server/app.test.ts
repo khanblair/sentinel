@@ -232,6 +232,53 @@ describe("HTTP API", () => {
     expect(csv.body).toContain("Test ID,Module");
   });
 
+  it("test-case CSV import: creates good rows and reports bad ones by line, without aborting the batch", async () => {
+    const project = await app.inject({ method: "POST", url: "/api/projects", payload: { name: "P" } });
+    const suite = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.json().id}/suites`,
+      payload: { name: "S" },
+    });
+    const suiteId = suite.json().id;
+
+    const csv = [
+      "module,title,priority,urlPath,steps,expectedResult",
+      "Checkout,Apply discount,P1,/cart,1. add item,Discount applied",
+      "Checkout,,P1,/cart,1. x,y", // missing required title
+    ].join("\n");
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/suites/${suiteId}/test-cases/import`,
+      payload: { csv },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.imported).toBe(1);
+    expect(body.errors).toHaveLength(1);
+    expect(body.errors[0].line).toBe(3);
+
+    const list = await app.inject({ method: "GET", url: `/api/suites/${suiteId}/test-cases` });
+    expect(list.json()).toHaveLength(1);
+  });
+
+  it("test-case CSV import returns 400 with a clear message when required headers are missing", async () => {
+    const project = await app.inject({ method: "POST", url: "/api/projects", payload: { name: "P" } });
+    const suite = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.json().id}/suites`,
+      payload: { name: "S" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/suites/${suite.json().id}/test-cases/import`,
+      payload: { csv: "module,title\nA,B" },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain("priority");
+  });
+
   it("scheduled-jobs: create, list, and delete round-trip through the API", async () => {
     const assistant = await seedAssistant(prisma);
     const providerConfig = await app.inject({

@@ -173,6 +173,11 @@ export const api = {
     ) => request<TestCase>(`/api/suites/${suiteId}/test-cases`, { method: "POST", body: JSON.stringify(input) }),
     archive: (id: string) => request<TestCase>(`/api/test-cases/${id}/archive`, { method: "POST" }),
     clone: (id: string) => request<TestCase>(`/api/test-cases/${id}/clone`, { method: "POST" }),
+    importCsv: (suiteId: string, csv: string) =>
+      request<{ imported: number; errors: Array<{ line: number; message: string }> }>(
+        `/api/suites/${suiteId}/test-cases/import`,
+        { method: "POST", body: JSON.stringify({ csv }) },
+      ),
   },
   environments: {
     listByProject: (projectId: string) => request<Environment[]>(`/api/projects/${projectId}/environments`),

@@ -36,6 +36,12 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
   const [steps, setSteps] = useState("");
   const [expectedResult, setExpectedResult] = useState("");
 
+  const [importSummary, setImportSummary] = useState<{
+    imported: number;
+    errors: Array<{ line: number; message: string }>;
+  } | null>(null);
+  const [importing, setImporting] = useState(false);
+
   const [assistantId, setAssistantId] = useState("");
   const [environmentId, setEnvironmentId] = useState("");
   const [providerConfigId, setProviderConfigId] = useState("");
@@ -83,6 +89,25 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleImportCsv(event: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setError(null);
+    setImportSummary(null);
+    setImporting(true);
+    try {
+      const csvText = await file.text();
+      const summary = await api.testCases.importCsv(suite.id, csvText);
+      setImportSummary(summary);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -166,6 +191,35 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
           Add test case
         </button>
       </form>
+
+      <div className="field-row">
+        <label className="btn btn-sm">
+          {importing ? "Importing…" : "Import CSV"}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => void handleImportCsv(event)}
+            disabled={importing}
+            className="visually-hidden-file-input"
+            aria-label="Import test cases from CSV"
+          />
+        </label>
+        <span className="item-subtext">
+          Required columns: module, title, priority, urlPath, steps, expectedResult
+        </span>
+      </div>
+      {importSummary && (
+        <p className="item-subtext">
+          Imported {importSummary.imported} test case{importSummary.imported === 1 ? "" : "s"}.
+          {importSummary.errors.length > 0 && (
+            <>
+              {" "}
+              {importSummary.errors.length} row{importSummary.errors.length === 1 ? "" : "s"} skipped:{" "}
+              {importSummary.errors.map((e) => `line ${e.line} (${e.message})`).join("; ")}
+            </>
+          )}
+        </p>
+      )}
 
       <h3>Run this suite</h3>
       <div className="field-row">

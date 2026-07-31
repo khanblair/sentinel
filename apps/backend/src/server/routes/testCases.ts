@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { TestCaseRepository } from "../../db/repositories/testCaseRepository.js";
+import { parseTestCaseCsv } from "../../testCases/importTestCasesCsv.js";
 import { sendErrorResponse } from "./helpers.js";
 
 const preconditionType = z.enum(["auto", "manual"]);
@@ -22,6 +23,8 @@ const createSchema = z.object({
 
 const updateSchema = createSchema.partial();
 
+const importSchema = z.object({ csv: z.string().min(1) });
+
 export function registerTestCaseRoutes(app: FastifyInstance, repo: TestCaseRepository): void {
   app.post<{ Params: { suiteId: string } }>(
     "/api/suites/:suiteId/test-cases",
@@ -37,6 +40,42 @@ export function registerTestCaseRoutes(app: FastifyInstance, repo: TestCaseRepos
       } catch (error) {
         return sendErrorResponse(reply, error);
       }
+    },
+  );
+
+  /** Partial-success import: one malformed row shouldn't sink the other 199 — each
+   * row is validated and created independently, and failures are reported by CSV
+   * line number rather than aborting the batch. */
+  app.post<{ Params: { suiteId: string } }>(
+    "/api/suites/:suiteId/test-cases/import",
+    async (request, reply) => {
+      const parsedBody = importSchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.status(400).send({ status: "error", message: parsedBody.error.message });
+      }
+
+      const parsedCsv = parseTestCaseCsv(parsedBody.data.csv);
+      if (!parsedCsv.ok) {
+        return reply.status(400).send({ status: "error", message: parsedCsv.error });
+      }
+
+      const errors: Array<{ line: number; message: string }> = [];
+      let imported = 0;
+      for (const { line, data } of parsedCsv.rows) {
+        const parsedRow = createSchema.safeParse(data);
+        if (!parsedRow.success) {
+          errors.push({ line, message: parsedRow.error.issues.map((issue) => issue.message).join("; ") });
+          continue;
+        }
+        try {
+          await repo.create({ ...parsedRow.data, suiteId: request.params.suiteId });
+          imported += 1;
+        } catch (error) {
+          errors.push({ line, message: error instanceof Error ? error.message : String(error) });
+        }
+      }
+
+      return reply.send({ imported, errors });
     },
   );
 
