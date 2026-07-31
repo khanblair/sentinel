@@ -6,7 +6,17 @@ const PROVIDERS: Provider[] = ["claude", "deepseek", "gemini", "openai", "openro
 
 type TestResult = { ok: boolean; message: string } | { pending: true };
 
+type SettingsSection = "providers" | "rules" | "skills" | "assistants";
+
+const SECTIONS: ReadonlyArray<{ id: SettingsSection; label: string }> = [
+  { id: "providers", label: "Providers" },
+  { id: "rules", label: "Rules" },
+  { id: "skills", label: "Skills" },
+  { id: "assistants", label: "Assistants" },
+];
+
 export function SettingsView(): JSX.Element {
+  const [section, setSection] = useState<SettingsSection>("providers");
   const [configs, setConfigs] = useState<ProviderConfigSummary[]>([]);
   const [provider, setProvider] = useState<Provider>("claude");
   const [apiKey, setApiKey] = useState("");
@@ -154,9 +164,23 @@ export function SettingsView(): JSX.Element {
   return (
     <section>
       <h2>Settings</h2>
-      <p>AI providers</p>
       {error && <p role="alert">{error}</p>}
 
+      <div className="settings-tabs">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`settings-tab${section === s.id ? " active" : ""}`}
+            onClick={() => setSection(s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === "providers" && (
+        <>
       <ul className="item-list">
         {configs.map((config) => {
           const result = testResults[config.id];
@@ -217,7 +241,11 @@ export function SettingsView(): JSX.Element {
           Add provider
         </button>
       </form>
+        </>
+      )}
 
+      {section === "rules" && (
+        <>
       <h3>Global rules</h3>
       <p className="item-subtext">Standing instructions applied to every session, regardless of project.</p>
       <ul className="item-list">
@@ -249,7 +277,11 @@ export function SettingsView(): JSX.Element {
           Add rule
         </button>
       </form>
+        </>
+      )}
 
+      {section === "skills" && (
+        <>
       <h3>Skills</h3>
       <p className="item-subtext">Toggleable capability packs an Assistant can enable by default.</p>
       <ul className="item-list">
@@ -292,7 +324,11 @@ export function SettingsView(): JSX.Element {
           Add skill
         </button>
       </form>
+        </>
+      )}
 
+      {section === "assistants" && (
+        <>
       <h3>Assistants</h3>
       <p className="item-subtext">Personas an active run picks from. Built-ins can't be edited or removed here.</p>
       <ul className="item-list">
@@ -335,6 +371,8 @@ export function SettingsView(): JSX.Element {
           Add assistant
         </button>
       </form>
+        </>
+      )}
     </section>
   );
 }
