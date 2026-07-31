@@ -9,6 +9,10 @@ import { SuiteDetailView } from "./views/SuiteDetailView";
 import { SettingsView } from "./views/SettingsView";
 import { AdHocView } from "./views/AdHocView";
 import type { PendingPrompt } from "./components/RunTicker";
+import { CommandPalette } from "./components/CommandPalette";
+import { OnboardingModal } from "./components/OnboardingModal";
+import { useTheme } from "./hooks/useTheme";
+import { notifyRunFinished, requestNotificationPermission } from "./notifications";
 
 type View = "dashboard" | "projects" | "suites" | "suite-detail" | "settings" | "adhoc";
 type HealthState = "checking" | "connected" | "unreachable";
@@ -35,6 +39,11 @@ export function App(): JSX.Element {
   const [project, setProject] = useState<Project | null>(null);
   const [suite, setSuite] = useState<Suite | null>(null);
 
+  const [theme, toggleTheme] = useTheme();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => window.localStorage.getItem("sentinel-onboarding-dismissed") !== "true",
+  );
   const [health, setHealth] = useState<HealthState>("checking");
   const [activeRun, setActiveRun] = useState<Run | null>(null);
   const [activeRunSteps, setActiveRunSteps] = useState<StepLog[]>([]);
@@ -58,12 +67,30 @@ export function App(): JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const handleMessage = useCallback((message: ServerMessage) => {
     switch (message.type) {
       case "run:update":
         setActiveRun((previous) => {
           if (previous?.id !== message.run.id) {
             setActiveRunSteps([]);
+          }
+          if (previous?.status === "running" && message.run.status !== "running" && !document.hasFocus()) {
+            notifyRunFinished(message.run);
           }
           return message.run;
         });
@@ -85,6 +112,11 @@ export function App(): JSX.Element {
   }, []);
 
   const { connectionState, send } = useBackendSocket(backendWsUrl(), handleMessage);
+
+  function dismissOnboarding(): void {
+    window.localStorage.setItem("sentinel-onboarding-dismissed", "true");
+    setShowOnboarding(false);
+  }
 
   function handleAnswerPrompt(requestId: string, value: string | null): void {
     send({ type: "run:prompt-response", requestId, value });
@@ -191,8 +223,13 @@ export function App(): JSX.Element {
             <span className={statusDotClass(connectionDotState(connectionState))} /> Live updates{" "}
             {connectionState}
           </div>
+          <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light/dark theme">
+            {theme === "dark" ? "☾ Dark" : "☀ Light"}
+          </button>
           <div className="sidebar-meta">
             <span>v{__APP_VERSION__}</span>
+            <span className="sidebar-meta-sep">·</span>
+            <span>⌘K for commands</span>
           </div>
         </div>
       </aside>
@@ -257,6 +294,29 @@ export function App(): JSX.Element {
           )}
         </div>
       </main>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onGoToDashboard={() => setView("dashboard")}
+        onGoToProjects={() => setView("projects")}
+        onGoToSettings={() => setView("settings")}
+        onGoToNewChat={() => setView("adhoc")}
+        onSelectProject={(selected) => {
+          setProject(selected);
+          setView("suites");
+        }}
+      />
+
+      {showOnboarding && (
+        <OnboardingModal
+          onGoToSettings={() => {
+            dismissOnboarding();
+            setView("settings");
+          }}
+          onDismiss={dismissOnboarding}
+        />
+      )}
     </div>
   );
 }

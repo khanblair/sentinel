@@ -32,6 +32,10 @@ export function RunHistoryPanel({ suiteId }: RunHistoryPanelProps): JSX.Element 
   const [detailLoading, setDetailLoading] = useState(false);
   const [report, setReport] = useState<{ format: "markdown" | "csv"; text: string } | null>(null);
 
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [compareDetails, setCompareDetails] = useState<[RunDetail, RunDetail] | null>(null);
+  const [comparing, setComparing] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load(): Promise<void> {
@@ -74,6 +78,29 @@ export function RunHistoryPanel({ suiteId }: RunHistoryPanelProps): JSX.Element 
     }
   }
 
+  function toggleCompare(runId: string): void {
+    setCompareDetails(null);
+    setCompareIds((prev) => {
+      if (prev.includes(runId)) return prev.filter((id) => id !== runId);
+      if (prev.length >= 2) return [prev[1]!, runId];
+      return [...prev, runId];
+    });
+  }
+
+  async function handleCompare(): Promise<void> {
+    if (compareIds.length !== 2) return;
+    setError(null);
+    setComparing(true);
+    try {
+      const [a, b] = await Promise.all([api.runs.detail(compareIds[0]!), api.runs.detail(compareIds[1]!)]);
+      setCompareDetails([a, b]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setComparing(false);
+    }
+  }
+
   function downloadReport(format: "markdown" | "csv"): void {
     if (!selectedRunId) return;
     api.runs
@@ -100,6 +127,14 @@ export function RunHistoryPanel({ suiteId }: RunHistoryPanelProps): JSX.Element 
         <ul className="item-list">
           {history.map((run) => (
             <li key={run.runId} className="item-row">
+              <label className="run-compare-checkbox" title="Select to compare">
+                <input
+                  type="checkbox"
+                  checked={compareIds.includes(run.runId)}
+                  onChange={() => toggleCompare(run.runId)}
+                  aria-label={`Select run ${run.runId.slice(0, 8)} to compare`}
+                />
+              </label>
               <div className="item-row-main">
                 <button type="button" className="item-title-btn" onClick={() => void selectRun(run.runId)}>
                   Run {run.runId.slice(0, 8)}
@@ -113,6 +148,44 @@ export function RunHistoryPanel({ suiteId }: RunHistoryPanelProps): JSX.Element 
           ))}
           {history.length === 0 && <li className="empty-state">No runs yet for this suite.</li>}
         </ul>
+      )}
+
+      {compareIds.length > 0 && (
+        <div className="field-row">
+          <span className="item-subtext">{compareIds.length}/2 selected to compare</span>
+          <button type="button" className="btn btn-sm" onClick={() => void handleCompare()} disabled={compareIds.length !== 2}>
+            {comparing ? "Comparing…" : "Compare selected"}
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => { setCompareIds([]); setCompareDetails(null); }}>
+            Clear
+          </button>
+        </div>
+      )}
+
+      {compareDetails && (
+        <div className="run-compare-grid">
+          {compareDetails.map((runDetail) => (
+            <div key={runDetail.runId} className="run-panel">
+              <div className="run-panel-header">
+                <span className="run-id">Run {runDetail.runId.slice(0, 8)}</span>
+                <span className={STATUS_BADGE_CLASS[runDetail.status] ?? "badge badge-neutral"}>
+                  {runDetail.status}
+                </span>
+              </div>
+              <ol className="step-list">
+                {runDetail.steps.map((step) => (
+                  <li key={step.id} className="step-item">
+                    <span className={VERDICT_BADGE_CLASS[step.verdict] ?? "badge badge-neutral"}>
+                      {step.verdict}
+                    </span>{" "}
+                    {step.observation}
+                  </li>
+                ))}
+                {runDetail.steps.length === 0 && <li className="empty-state">No step logs recorded.</li>}
+              </ol>
+            </div>
+          ))}
+        </div>
       )}
 
       {selectedRunId && (

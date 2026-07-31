@@ -35,6 +35,9 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
   const [urlPath, setUrlPath] = useState("/");
   const [steps, setSteps] = useState("");
   const [expectedResult, setExpectedResult] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
+
+  const [activeTagFilters, setActiveTagFilters] = useState<string[]>([]);
 
   const [importSummary, setImportSummary] = useState<{
     imported: number;
@@ -75,6 +78,10 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
     if (!title.trim() || !expectedResult.trim()) return;
     setError(null);
     try {
+      const tags = tagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
       await api.testCases.create(suite.id, {
         module: suite.name,
         title,
@@ -82,10 +89,12 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
         urlPath,
         steps,
         expectedResult,
+        tags: tags.length > 0 ? tags : undefined,
       });
       setTitle("");
       setSteps("");
       setExpectedResult("");
+      setTagsInput("");
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -129,6 +138,10 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
     }
   }
 
+  function toggleTagFilter(tag: string): void {
+    setActiveTagFilters((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  }
+
   function handleTriggerRun(): void {
     if (!assistantId.trim() || !providerConfigId || !model.trim()) {
       setError("Assistant id, provider config, and model are all required to run.");
@@ -144,6 +157,12 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
     });
   }
 
+  const allTags = Array.from(new Set(testCases.flatMap((tc) => tc.tags))).sort();
+  const visibleTestCases =
+    activeTagFilters.length === 0
+      ? testCases
+      : testCases.filter((tc) => activeTagFilters.every((tag) => tc.tags.includes(tag)));
+
   return (
     <section>
       <button type="button" className="back-link" onClick={onBack}>
@@ -153,12 +172,34 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
       {error && <p role="alert">{error}</p>}
 
       <h3>Test cases</h3>
+      {allTags.length > 0 && (
+        <div className="tag-filter-row">
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              className={`tag-chip${activeTagFilters.includes(tag) ? " active" : ""}`}
+              onClick={() => toggleTagFilter(tag)}
+            >
+              {tag}
+            </button>
+          ))}
+          {activeTagFilters.length > 0 && (
+            <button type="button" className="tag-chip-clear" onClick={() => setActiveTagFilters([])}>
+              Clear filter
+            </button>
+          )}
+        </div>
+      )}
       <ul className="item-list">
-        {testCases.map((testCase) => (
+        {visibleTestCases.map((testCase) => (
           <li key={testCase.id} className="item-row">
             <div className="item-row-main">
               <span className="item-title-btn item-title-static">{testCase.title}</span>
-              <span className="item-subtext">{testCase.urlPath}</span>
+              <span className="item-subtext">
+                {testCase.urlPath}
+                {testCase.tags.length > 0 && ` · ${testCase.tags.join(", ")}`}
+              </span>
             </div>
             <div className="field-row">
               <button type="button" className="btn btn-sm" onClick={() => void handleCloneTestCase(testCase.id)}>
@@ -175,6 +216,9 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
           </li>
         ))}
         {testCases.length === 0 && <li className="empty-state">No test cases yet — add one below.</li>}
+        {testCases.length > 0 && visibleTestCases.length === 0 && (
+          <li className="empty-state">No test cases match the selected tags.</li>
+        )}
       </ul>
 
       <form className="field-stack" onSubmit={(event) => void handleCreateTestCase(event)}>
@@ -186,6 +230,12 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
           onChange={(e) => setExpectedResult(e.target.value)}
           placeholder="Expected result"
           aria-label="Expected result"
+        />
+        <input
+          value={tagsInput}
+          onChange={(e) => setTagsInput(e.target.value)}
+          placeholder="Tags (comma-separated, e.g. smoke, regression)"
+          aria-label="Tags"
         />
         <button type="submit" className="btn btn-primary">
           Add test case
