@@ -479,6 +479,14 @@ select {
   font-size: 12px;
 }
 
+.test-result-ok {
+  color: var(--success);
+}
+
+.test-result-fail {
+  color: var(--danger);
+}
+
 .empty-state {
   color: var(--text-muted);
   font-size: 13px;

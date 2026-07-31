@@ -18,7 +18,7 @@ interface ApiErrorBody {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${backendHttpUrl()}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: init?.body ? { "Content-Type": "application/json", ...init?.headers } : init?.headers,
   });
 
   if (!response.ok) {
@@ -188,6 +188,7 @@ export const api = {
     create: (input: { provider: Provider; apiKey: string; label?: string | null }) =>
       request<ProviderConfigSummary>("/api/provider-configs", { method: "POST", body: JSON.stringify(input) }),
     remove: (id: string) => request<void>(`/api/provider-configs/${id}`, { method: "DELETE" }),
+    test: (id: string) => request<{ ok: boolean; message: string }>(`/api/provider-configs/${id}/test`, { method: "POST" }),
   },
   scheduledJobs: {
     listBySuite: (suiteId: string) => request<ScheduledJob[]>(`/api/suites/${suiteId}/scheduled-jobs`),

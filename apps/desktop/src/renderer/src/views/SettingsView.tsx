@@ -4,12 +4,15 @@ import { api, type ProviderConfigSummary } from "../api/client";
 
 const PROVIDERS: Provider[] = ["claude", "deepseek", "gemini", "openai", "openrouter"];
 
+type TestResult = { ok: boolean; message: string } | { pending: true };
+
 export function SettingsView(): JSX.Element {
   const [configs, setConfigs] = useState<ProviderConfigSummary[]>([]);
   const [provider, setProvider] = useState<Provider>("claude");
   const [apiKey, setApiKey] = useState("");
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
 
   async function refresh(): Promise<void> {
     try {
@@ -47,6 +50,19 @@ export function SettingsView(): JSX.Element {
     }
   }
 
+  async function handleTest(id: string): Promise<void> {
+    setTestResults((prev) => ({ ...prev, [id]: { pending: true } }));
+    try {
+      const result = await api.providerConfigs.test(id);
+      setTestResults((prev) => ({ ...prev, [id]: result }));
+    } catch (err) {
+      setTestResults((prev) => ({
+        ...prev,
+        [id]: { ok: false, message: err instanceof Error ? err.message : String(err) },
+      }));
+    }
+  }
+
   return (
     <section>
       <h2>Settings</h2>
@@ -54,22 +70,41 @@ export function SettingsView(): JSX.Element {
       {error && <p role="alert">{error}</p>}
 
       <ul className="item-list">
-        {configs.map((config) => (
-          <li key={config.id} className="item-row">
-            <div className="item-row-main">
-              <span className="item-title-btn item-title-static">{config.provider}</span>
-              {config.label && <span className="item-subtext">{config.label}</span>}
-            </div>
-            <button
-              type="button"
-              className="btn btn-danger btn-sm"
-              onClick={() => void handleDelete(config.id)}
-              aria-label={`Remove ${config.provider}`}
-            >
-              Remove
-            </button>
-          </li>
-        ))}
+        {configs.map((config) => {
+          const result = testResults[config.id];
+          return (
+            <li key={config.id} className="item-row">
+              <div className="item-row-main">
+                <span className="item-title-btn item-title-static">{config.provider}</span>
+                {config.label && <span className="item-subtext">{config.label}</span>}
+                {result && !("pending" in result) && (
+                  <span className={result.ok ? "item-subtext test-result-ok" : "item-subtext test-result-fail"}>
+                    {result.message}
+                  </span>
+                )}
+              </div>
+              <div className="field-row">
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => void handleTest(config.id)}
+                  disabled={result !== undefined && "pending" in result}
+                  aria-label={`Test ${config.provider} connection`}
+                >
+                  {result !== undefined && "pending" in result ? "Testing…" : "Test connection"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  onClick={() => void handleDelete(config.id)}
+                  aria-label={`Remove ${config.provider}`}
+                >
+                  Remove
+                </button>
+              </div>
+            </li>
+          );
+        })}
         {configs.length === 0 && <li className="empty-state">No providers configured yet.</li>}
       </ul>
 

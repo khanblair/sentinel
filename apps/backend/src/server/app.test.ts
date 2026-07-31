@@ -102,6 +102,11 @@ describe("HTTP API", () => {
     expect(response.payload).not.toContain("sk-super-secret");
   });
 
+  it("testing a provider config that doesn't exist returns 404, not a 500 or a network call", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/provider-configs/does-not-exist/test" });
+    expect(response.statusCode).toBe(404);
+  });
+
   it("triggering a run rejects an invalid mode with 400, not a 500", async () => {
     const response = await app.inject({
       method: "POST",
