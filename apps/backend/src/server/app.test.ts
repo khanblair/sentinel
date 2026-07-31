@@ -4,6 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestPrismaClient, resetDb, seedAssistant } from "../test/testDb.js";
 import { WsPromptBroker } from "../ws/promptBroker.js";
+import { PreviewController } from "../ws/previewController.js";
 import { buildApp } from "./app.js";
 
 describe("HTTP API", () => {
@@ -17,6 +18,7 @@ describe("HTTP API", () => {
       encryptionKey: randomBytes(32),
       broadcast: () => {},
       promptBroker: new WsPromptBroker(() => {}),
+      previewController: new PreviewController(() => {}),
       logger: false,
     });
   });

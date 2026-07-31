@@ -7,6 +7,7 @@ import { FakePageFactory } from "../automation/fakePageFactory.js";
 import { fullAutoResolver } from "../executionLoop/confirmation.js";
 import { FakeProvider } from "../providers/fakeProvider.js";
 import { RuleRepository } from "../db/repositories/ruleRepository.js";
+import { PreviewController } from "../ws/previewController.js";
 import { runAdHoc } from "./runAdHoc.js";
 
 function assertPassStep(provider: FakeProvider, reason: string): void {
@@ -54,6 +55,7 @@ describe("runAdHoc", () => {
       mode: "interactive",
       provider,
       pageFactory,
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: (message) => messages.push(message),
     });
@@ -85,6 +87,7 @@ describe("runAdHoc", () => {
       mode: "interactive",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: () => {},
     });
@@ -111,6 +114,7 @@ describe("runAdHoc", () => {
       mode: "interactive",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: () => {},
     });
@@ -131,6 +135,7 @@ describe("runAdHoc", () => {
         mode: "interactive",
         provider: new FakeProvider(),
         pageFactory: new FakePageFactory(),
+        previewController: new PreviewController(() => {}),
         resolveConfirmation: fullAutoResolver,
         broadcast: () => {},
       }),
@@ -148,6 +153,7 @@ describe("runAdHoc", () => {
         mode: "interactive",
         provider: new FakeProvider(),
         pageFactory: new FakePageFactory(),
+        previewController: new PreviewController(() => {}),
         resolveConfirmation: fullAutoResolver,
         broadcast: () => {},
       }),

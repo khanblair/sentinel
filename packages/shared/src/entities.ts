@@ -33,6 +33,17 @@ export interface ModelInfo {
   supportsTools: boolean | null;
 }
 
+/** A single element found on a page — either from listElements (the action loop's
+ * own DOM scan) or from the live preview's "select element" point-inspection. Both
+ * describe the same shape so the renderer doesn't need two element-summary types. */
+export interface ElementSummary {
+  selector: string;
+  role: string | null;
+  text: string | null;
+  ariaLabel: string | null;
+  checked: boolean | null;
+}
+
 export interface Project {
   id: string;
   name: string;

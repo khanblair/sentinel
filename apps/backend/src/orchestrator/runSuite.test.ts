@@ -10,6 +10,7 @@ import { ProjectRepository } from "../db/repositories/projectRepository.js";
 import { RuleRepository } from "../db/repositories/ruleRepository.js";
 import { SuiteRepository } from "../db/repositories/suiteRepository.js";
 import { TestCaseRepository } from "../db/repositories/testCaseRepository.js";
+import { PreviewController } from "../ws/previewController.js";
 import { runSuite } from "./runSuite.js";
 
 async function seedSuiteWithOneCase(prisma: PrismaClient) {
@@ -75,6 +76,7 @@ describe("runSuite", () => {
       mode: "interactive",
       provider,
       pageFactory,
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: (message) => messages.push(message),
     });
@@ -111,6 +113,7 @@ describe("runSuite", () => {
       mode: "full_auto",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: () => {},
       trigger: "scheduled",
@@ -138,6 +141,7 @@ describe("runSuite", () => {
       mode: "interactive",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: () => {},
     });
@@ -176,6 +180,7 @@ describe("runSuite", () => {
       mode: "interactive",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: () => {},
     });
@@ -209,6 +214,7 @@ describe("runSuite", () => {
       mode: "interactive",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: () => {},
     });
@@ -231,6 +237,7 @@ describe("runSuite", () => {
         mode: "interactive",
         provider: new FakeProvider(),
         pageFactory: new FakePageFactory(),
+        previewController: new PreviewController(() => {}),
         resolveConfirmation: fullAutoResolver,
         broadcast: () => {},
       }),
@@ -248,6 +255,7 @@ describe("runSuite", () => {
         mode: "interactive",
         provider: new FakeProvider(),
         pageFactory: new FakePageFactory(),
+        previewController: new PreviewController(() => {}),
         resolveConfirmation: fullAutoResolver,
         broadcast: () => {},
       }),
@@ -272,6 +280,7 @@ describe("runSuite", () => {
       mode: "interactive",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: () => {},
     });
@@ -301,6 +310,7 @@ describe("runSuite", () => {
       mode: "interactive",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       broadcast: () => {},
     });
@@ -342,6 +352,7 @@ describe("runSuite", () => {
       mode: "interactive",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       resolveRunPause: async () => false,
       broadcast: () => {},
@@ -385,6 +396,7 @@ describe("runSuite", () => {
       mode: "full_auto",
       provider,
       pageFactory: new FakePageFactory(),
+      previewController: new PreviewController(() => {}),
       resolveConfirmation: fullAutoResolver,
       resolveRunPause: async () => {
         resolveRunPauseCalls += 1;
@@ -414,6 +426,7 @@ describe("runSuite", () => {
         mode: "interactive",
         provider,
         pageFactory,
+        previewController: new PreviewController(() => {}),
         resolveConfirmation: fullAutoResolver,
         broadcast: (message) => messages.push(message),
       }),

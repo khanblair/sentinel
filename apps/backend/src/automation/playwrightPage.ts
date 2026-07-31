@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
-import type { Page as PlaywrightPageHandle } from "playwright";
-import type { ElementSummary, Page } from "./page.js";
+import type { CDPSession, Page as PlaywrightPageHandle } from "playwright";
+import type { ElementSummary, Page, ScreencastFrame } from "./page.js";
 
 const INTERACTIVE_SELECTOR =
   'a, button, input, select, textarea, [role], img, [aria-label], [onclick]';
@@ -12,6 +12,9 @@ const INTERACTIVE_SELECTOR =
  * the extraction gaps design §5.3 calls out as already-fixed in Testify.
  */
 export class PlaywrightPage implements Page {
+  private cdpSession: CDPSession | null = null;
+  private screencastListener: ((event: unknown) => void) | null = null;
+
   constructor(private readonly page: PlaywrightPageHandle) {}
 
   async goto(url: string): Promise<void> {
@@ -62,5 +65,74 @@ export class PlaywrightPage implements Page {
         };
       });
     }, INTERACTIVE_SELECTOR);
+  }
+
+  url(): string {
+    return this.page.url();
+  }
+
+  private async getCdpSession(): Promise<CDPSession> {
+    this.cdpSession ??= await this.page.context().newCDPSession(this.page);
+    return this.cdpSession;
+  }
+
+  async startScreencast(onFrame: (frame: ScreencastFrame) => void): Promise<void> {
+    const session = await this.getCdpSession();
+    const listener = (event: unknown): void => {
+      const payload = event as { data: string; metadata: ScreencastFrame["metadata"]; sessionId: number };
+      // Ack immediately, before handing off to the caller — CDP silently stops the
+      // stream if a frame goes unacked, and the caller (e.g. a slow WS send) must
+      // never be able to stall that.
+      void session.send("Page.screencastFrameAck", { sessionId: payload.sessionId }).catch(() => {});
+      onFrame({ dataBase64: payload.data, metadata: payload.metadata });
+    };
+    this.screencastListener = listener;
+    session.on("Page.screencastFrame", listener);
+    await session.send("Page.startScreencast", {
+      format: "jpeg",
+      quality: 60,
+      maxWidth: 960,
+      maxHeight: 720,
+      everyNthFrame: 1,
+    });
+  }
+
+  async stopScreencast(): Promise<void> {
+    if (!this.cdpSession) {
+      return;
+    }
+    await this.cdpSession.send("Page.stopScreencast").catch(() => {});
+    if (this.screencastListener) {
+      this.cdpSession.off("Page.screencastFrame", this.screencastListener);
+      this.screencastListener = null;
+    }
+  }
+
+  async setViewportSize(width: number, height: number): Promise<void> {
+    await this.page.setViewportSize({ width, height });
+  }
+
+  async describeElementAt(x: number, y: number): Promise<ElementSummary | null> {
+    return this.page.evaluate(
+      ([px, py]) => {
+        const el = document.elementFromPoint(px, py) as HTMLElement | null;
+        if (!el) return null;
+        const ariaLabel = el.getAttribute("aria-label") ?? el.getAttribute("alt");
+        const checked =
+          "checked" in el && (el.getAttribute("type") === "checkbox" || el.getAttribute("type") === "radio")
+            ? (el as HTMLInputElement).checked
+            : null;
+        let selector = el.tagName.toLowerCase();
+        if (el.id) selector += `#${el.id}`;
+        return {
+          selector,
+          role: el.getAttribute("role") ?? el.tagName.toLowerCase(),
+          text: el.textContent?.trim().slice(0, 200) || null,
+          ariaLabel: ariaLabel || null,
+          checked,
+        };
+      },
+      [x, y] as const,
+    );
   }
 }

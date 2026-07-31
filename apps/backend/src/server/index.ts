@@ -15,6 +15,7 @@ import { startSchedulerLoop } from "../scheduler/schedulerLoop.js";
 import { loadOrCreateEncryptionKey } from "../security/encryption.js";
 import { attachConnectionHandler, broadcast as broadcastToClients } from "../ws/index.js";
 import { WsPromptBroker } from "../ws/promptBroker.js";
+import { PreviewController } from "../ws/previewController.js";
 import { buildApp } from "./app.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
@@ -25,6 +26,7 @@ async function runScheduledJob(
   prisma: PrismaClient,
   providerConfigRepo: ProviderConfigRepository,
   broadcast: (message: ServerMessage) => void,
+  previewController: PreviewController,
 ): Promise<void> {
   if (!job.suiteId) {
     console.error(`ScheduledJob ${job.id} has no suiteId — skipping`);
@@ -46,6 +48,7 @@ async function runScheduledJob(
     resolveConfirmation: fullAutoResolver,
     broadcast,
     trigger: "scheduled",
+    previewController,
   });
 }
 
@@ -74,21 +77,22 @@ async function main(): Promise<void> {
     }
   };
   const promptBroker = new WsPromptBroker(broadcast);
+  const previewController = new PreviewController(broadcast);
   const providerConfigRepo = new ProviderConfigRepository(prisma, encryptionKey);
 
-  const app = buildApp({ prisma, encryptionKey, broadcast, promptBroker });
+  const app = buildApp({ prisma, encryptionKey, broadcast, promptBroker, previewController });
 
   const address = await app.listen({ port: PORT, host: HOST });
   app.log.info(`Sentinel backend listening at ${address}`);
 
   const wss = new WebSocketServer({ server: app.server, path: "/ws" });
   wssBox.current = wss;
-  attachConnectionHandler(wss, promptBroker);
+  attachConnectionHandler(wss, promptBroker, previewController);
 
   const scheduler = startSchedulerLoop({
     prisma,
     onDue: (job) =>
-      runScheduledJob(job, prisma, providerConfigRepo, broadcast).catch((error: unknown) => {
+      runScheduledJob(job, prisma, providerConfigRepo, broadcast, previewController).catch((error: unknown) => {
         app.log.error(error, `scheduled job ${job.id} failed`);
       }),
   });

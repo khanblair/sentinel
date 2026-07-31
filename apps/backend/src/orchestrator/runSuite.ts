@@ -8,6 +8,7 @@ import { generateRunInsights } from "../metacognition/insights.js";
 import { alwaysContinueResolver, shouldOfferEarlyStop, type RunPauseResolver } from "../metacognition/runPause.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import type { PageFactory } from "../automation/page.js";
+import type { PreviewController } from "../ws/previewController.js";
 import { runChecklistSteps } from "./runChecklistSteps.js";
 import { recordUsage, serializeRun, verdictToRunStatus, worstVerdict } from "./shared.js";
 import { composePersonaAndRules } from "./systemPrompt.js";
@@ -24,6 +25,9 @@ export interface RunSuiteOptions {
   /** Called once per persisted Run/StepLog change — the live step-by-step ticker
    * (design §4.3) subscribes to exactly these two message types over WebSocket. */
   broadcast: (message: ServerMessage) => void;
+  /** Live preview (design §5.4) — attached to each Test Case's Page as it's
+   * created, detached and cleaned up when the run ends. */
+  previewController: PreviewController;
   /** Lets a caller pre-generate the Run's id (e.g. to build an interactive
    * ConfirmationResolver bound to this run before runSuite creates the row). Falls
    * back to Prisma's default cuid() generation when omitted. */
@@ -50,6 +54,7 @@ interface ExecuteTestCaseParams {
   stepIndexCounter: { value: number };
   /** Composed Assistant persona + Rules (see orchestrator/systemPrompt.ts). */
   personaPrefix: string;
+  previewController: PreviewController;
 }
 
 /** One Test Case's checklist, start to finish: generate it, then run its steps via
@@ -67,6 +72,7 @@ async function executeTestCase(params: ExecuteTestCaseParams): Promise<StepVerdi
     baseUrl,
     stepIndexCounter,
     personaPrefix,
+    previewController,
   } = params;
 
   const checklist = await generateChecklistFromTestCase({
@@ -79,6 +85,7 @@ async function executeTestCase(params: ExecuteTestCaseParams): Promise<StepVerdi
   await recordUsage(prisma, runId, provider, checklist.usage);
 
   const page = await pageFactory.getPage(`${baseUrl}${testCase.urlPath}`);
+  await previewController.attachPage(runId, page);
 
   return runChecklistSteps({
     prisma,
@@ -91,6 +98,7 @@ async function executeTestCase(params: ExecuteTestCaseParams): Promise<StepVerdi
     testCaseId: testCase.id,
     stepIndexCounter,
     personaPrefix,
+    previewController,
   });
 }
 
@@ -133,6 +141,7 @@ export async function runSuite(options: RunSuiteOptions): Promise<Run> {
     broadcast,
     runId,
     trigger = "manual",
+    previewController,
   } = options;
   const resolveRunPause = mode === "interactive" ? (options.resolveRunPause ?? alwaysContinueResolver) : null;
 
@@ -194,6 +203,7 @@ export async function runSuite(options: RunSuiteOptions): Promise<Run> {
         baseUrl,
         stepIndexCounter,
         personaPrefix,
+        previewController,
       });
       overallVerdict = worstVerdict(overallVerdict, caseVerdict);
       caseVerdicts.push(caseVerdict);
@@ -227,6 +237,8 @@ export async function runSuite(options: RunSuiteOptions): Promise<Run> {
     broadcast({ type: "run:update", run: serializeRun(failed) });
     throw error;
   } finally {
+    await previewController.detachPage(run.id);
+    previewController.cleanup(run.id);
     await pageFactory.close();
   }
 }

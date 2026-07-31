@@ -6,6 +6,7 @@ import type { ConfirmationResolver } from "../executionLoop/confirmation.js";
 import { generateRunInsights } from "../metacognition/insights.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import type { PageFactory } from "../automation/page.js";
+import type { PreviewController } from "../ws/previewController.js";
 import { runChecklistSteps } from "./runChecklistSteps.js";
 import { serializeRun, verdictToRunStatus } from "./shared.js";
 import { composePersonaAndRules } from "./systemPrompt.js";
@@ -37,6 +38,7 @@ export interface RunAdHocOptions {
   broadcast: (message: ServerMessage) => void;
   runId?: string;
   trigger?: Run["trigger"];
+  previewController: PreviewController;
 }
 
 /**
@@ -61,6 +63,7 @@ export async function runAdHoc(options: RunAdHocOptions): Promise<Run> {
     broadcast,
     runId,
     trigger = "manual",
+    previewController,
   } = options;
 
   if (checklist.length === 0) {
@@ -84,6 +87,7 @@ export async function runAdHoc(options: RunAdHocOptions): Promise<Run> {
 
   try {
     const page = await pageFactory.getPage(url);
+    await previewController.attachPage(run.id, page);
     const stepIndexCounter = { value: 0 };
     const verdict: StepVerdict = await runChecklistSteps({
       prisma,
@@ -96,6 +100,7 @@ export async function runAdHoc(options: RunAdHocOptions): Promise<Run> {
       testCaseId: null,
       stepIndexCounter,
       personaPrefix,
+      previewController,
     });
 
     const allStepLogs = await prisma.stepLog.findMany({ where: { runId: run.id } });
@@ -117,6 +122,8 @@ export async function runAdHoc(options: RunAdHocOptions): Promise<Run> {
     broadcast({ type: "run:update", run: serializeRun(failed) });
     throw error;
   } finally {
+    await previewController.detachPage(run.id);
+    previewController.cleanup(run.id);
     await pageFactory.close();
   }
 }

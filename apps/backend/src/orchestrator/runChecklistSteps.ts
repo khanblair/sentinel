@@ -4,6 +4,7 @@ import type { Page } from "../automation/page.js";
 import { runStep, type StepResult } from "../executionLoop/actionLoop.js";
 import type { ConfirmationResolver } from "../executionLoop/confirmation.js";
 import type { ProviderAdapter } from "../providers/types.js";
+import type { PreviewController } from "../ws/previewController.js";
 import { recordUsage, serializeStepLog, worstVerdict } from "./shared.js";
 
 export interface RunChecklistStepsParams {
@@ -20,18 +21,36 @@ export interface RunChecklistStepsParams {
    * unique per Run, not just per checklist. */
   stepIndexCounter: { value: number };
   personaPrefix: string;
+  previewController: PreviewController;
 }
 
 /** Executes one already-generated checklist's steps to a verdict: run each step,
  * persist a StepLog + broadcast it, stop at the first non-pass step. Used by both
  * runSuite (one checklist per Test Case) and runAdHoc (one checklist, no Test Case). */
 export async function runChecklistSteps(params: RunChecklistStepsParams): Promise<StepVerdict> {
-  const { prisma, runId, provider, page, resolveConfirmation, broadcast, steps, testCaseId, stepIndexCounter, personaPrefix } =
-    params;
+  const {
+    prisma,
+    runId,
+    provider,
+    page,
+    resolveConfirmation,
+    broadcast,
+    steps,
+    testCaseId,
+    stepIndexCounter,
+    personaPrefix,
+    previewController,
+  } = params;
 
   let verdict: StepVerdict = "pass";
   for (const instruction of steps) {
-    const result: StepResult = await runStep({ instruction, page, provider, resolveConfirmation, personaPrefix });
+    previewController.beginStep(runId);
+    let result: StepResult;
+    try {
+      result = await runStep({ instruction, page, provider, resolveConfirmation, personaPrefix });
+    } finally {
+      previewController.endStep(runId);
+    }
     await recordUsage(prisma, runId, provider, result.usage);
 
     const stepLog = await prisma.stepLog.create({

@@ -14,6 +14,7 @@ import { RuleRepository } from "../db/repositories/ruleRepository.js";
 import { SkillRepository } from "../db/repositories/skillRepository.js";
 import { AnalyticsRepository } from "../analytics/repository.js";
 import type { WsPromptBroker } from "../ws/promptBroker.js";
+import type { PreviewController } from "../ws/previewController.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerSuiteRoutes } from "./routes/suites.js";
 import { registerTestCaseRoutes } from "./routes/testCases.js";
@@ -35,6 +36,7 @@ export interface BuildAppOptions {
    * WsPromptBroker so run:prompt / run:update / run:step all flow through one path. */
   broadcast: (message: ServerMessage) => void;
   promptBroker: WsPromptBroker;
+  previewController: PreviewController;
   logger?: boolean;
 }
 
@@ -43,7 +45,7 @@ export interface BuildAppOptions {
  * real (test) database via Fastify's `.inject()`, with no network socket involved.
  */
 export function buildApp(options: BuildAppOptions): FastifyInstance {
-  const { prisma, encryptionKey, broadcast, promptBroker } = options;
+  const { prisma, encryptionKey, broadcast, promptBroker, previewController } = options;
   const app = Fastify({ logger: options.logger ?? true });
 
   // The renderer is never same-origin as this server: it loads from file://, a
@@ -68,7 +70,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerTestCaseRoutes(app, new TestCaseRepository(prisma));
   registerEnvironmentRoutes(app, new EnvironmentRepository(prisma));
   registerProviderConfigRoutes(app, providerConfigRepo);
-  registerRunRoutes(app, { prisma, providerConfigRepo, promptBroker, broadcast });
+  registerRunRoutes(app, { prisma, providerConfigRepo, promptBroker, broadcast, previewController });
   registerAssistantRoutes(app, new AssistantRepository(prisma));
   registerScheduledJobRoutes(app, new ScheduledJobRepository(prisma));
   registerRuleRoutes(app, new RuleRepository(prisma));

@@ -1,6 +1,7 @@
 import type { RawData, WebSocket, WebSocketServer } from "ws";
 import { isClientMessage, type ServerMessage } from "@sentinel/shared";
 import type { WsPromptBroker } from "./promptBroker.js";
+import type { PreviewController } from "./previewController.js";
 
 export function broadcast(wss: WebSocketServer, message: ServerMessage): void {
   const payload = JSON.stringify(message);
@@ -11,7 +12,11 @@ export function broadcast(wss: WebSocketServer, message: ServerMessage): void {
   }
 }
 
-export function attachConnectionHandler(wss: WebSocketServer, promptBroker: WsPromptBroker): void {
+export function attachConnectionHandler(
+  wss: WebSocketServer,
+  promptBroker: WsPromptBroker,
+  previewController: PreviewController,
+): void {
   wss.on("connection", (socket: WebSocket) => {
     socket.on("message", (data: RawData) => {
       let parsed: unknown;
@@ -44,6 +49,44 @@ export function attachConnectionHandler(wss: WebSocketServer, promptBroker: WsPr
 
       if (parsed.type === "run:prompt-response") {
         promptBroker.respond(parsed.requestId, parsed.value);
+        return;
+      }
+
+      if (parsed.type === "preview:start") {
+        void previewController.handleStart(parsed.runId);
+        return;
+      }
+
+      if (parsed.type === "preview:stop") {
+        void previewController.handleStop(parsed.runId);
+        return;
+      }
+
+      if (parsed.type === "preview:set-viewport") {
+        void previewController.setViewport(parsed.runId, parsed.width, parsed.height).then((result) => {
+          socket.send(
+            JSON.stringify({
+              type: "preview:action-result",
+              runId: parsed.runId,
+              ok: result.ok,
+              reason: result.reason,
+            } satisfies ServerMessage),
+          );
+        });
+        return;
+      }
+
+      if (parsed.type === "preview:select-element") {
+        void previewController.describeElementAt(parsed.runId, parsed.ratioX, parsed.ratioY).then((result) => {
+          socket.send(
+            JSON.stringify(
+              result.ok
+                ? { type: "preview:element", runId: parsed.runId, element: result.element }
+                : { type: "preview:element", runId: parsed.runId, element: null, reason: result.reason },
+            ),
+          );
+        });
+        return;
       }
     });
   });

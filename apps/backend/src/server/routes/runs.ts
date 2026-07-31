@@ -12,6 +12,7 @@ import { buildAdHocPersonaPrefix, runAdHoc } from "../../orchestrator/runAdHoc.j
 import { runSuite } from "../../orchestrator/runSuite.js";
 import { createProviderAdapter } from "../../providers/aiSdkProvider.js";
 import type { WsPromptBroker } from "../../ws/promptBroker.js";
+import type { PreviewController } from "../../ws/previewController.js";
 import { sendErrorResponse } from "./helpers.js";
 
 const runSchema = z.object({
@@ -44,6 +45,7 @@ export interface RunRouteDeps {
   providerConfigRepo: ProviderConfigRepository;
   promptBroker: WsPromptBroker;
   broadcast: (message: ServerMessage) => void;
+  previewController: PreviewController;
 }
 
 /**
@@ -86,6 +88,7 @@ export function registerRunRoutes(app: FastifyInstance, deps: RunRouteDeps): voi
         resolveRunPause,
         broadcast: deps.broadcast,
         runId,
+        previewController: deps.previewController,
       }).catch((error: unknown) => {
         app.log.error(error, `run ${runId} failed`);
       });
@@ -151,6 +154,7 @@ export function registerRunRoutes(app: FastifyInstance, deps: RunRouteDeps): voi
         resolveConfirmation,
         broadcast: deps.broadcast,
         runId,
+        previewController: deps.previewController,
       }).catch((error: unknown) => {
         app.log.error(error, `ad-hoc run ${runId} failed`);
       });

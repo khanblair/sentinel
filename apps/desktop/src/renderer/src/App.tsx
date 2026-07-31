@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Project, Run, RunMode, ServerMessage, StepLog, Suite } from "@sentinel/shared";
 import { api, backendHttpUrl, backendWsUrl, type RecentRun } from "./api/client";
 import { useBackendSocket, type SocketConnectionState } from "./ws/useBackendSocket";
@@ -11,8 +11,15 @@ import { AdHocView } from "./views/AdHocView";
 import type { PendingPrompt } from "./components/RunTicker";
 import { CommandPalette } from "./components/CommandPalette";
 import { OnboardingModal } from "./components/OnboardingModal";
+import { PreviewPanel, type PreviewFrame } from "./components/PreviewPanel";
 import { useTheme } from "./hooks/useTheme";
 import { notifyRunFinished, requestNotificationPermission } from "./notifications";
+
+const PREVIEW_OPEN_KEY = "sentinel-preview-open";
+const PREVIEW_WIDTH_KEY = "sentinel-preview-width";
+const DEFAULT_PREVIEW_WIDTH = 420;
+const MIN_PREVIEW_WIDTH = 280;
+const MAX_PREVIEW_WIDTH = 900;
 
 type View = "dashboard" | "projects" | "suites" | "suite-detail" | "settings" | "adhoc";
 type HealthState = "checking" | "connected" | "unreachable";
@@ -48,6 +55,14 @@ export function App(): JSX.Element {
   const [activeRun, setActiveRun] = useState<Run | null>(null);
   const [activeRunSteps, setActiveRunSteps] = useState<StepLog[]>([]);
   const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
+
+  const [previewOpen, setPreviewOpen] = useState(() => window.localStorage.getItem(PREVIEW_OPEN_KEY) === "true");
+  const [previewWidth, setPreviewWidth] = useState(
+    () => Number(window.localStorage.getItem(PREVIEW_WIDTH_KEY)) || DEFAULT_PREVIEW_WIDTH,
+  );
+  const [previewFrame, setPreviewFrame] = useState<PreviewFrame | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const watchedRunIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +118,12 @@ export function App(): JSX.Element {
       case "run:prompt":
         setPendingPrompt({ runId: message.runId, requestId: message.requestId, prompt: message.prompt });
         break;
+      case "preview:frame":
+        setPreviewFrame({ dataBase64: message.dataBase64, metadata: message.metadata });
+        break;
+      case "preview:url":
+        setPreviewUrl(message.url);
+        break;
       case "error":
         console.error("Backend WS error:", message.message);
         break;
@@ -112,6 +133,67 @@ export function App(): JSX.Element {
   }, []);
 
   const { connectionState, send } = useBackendSocket(backendWsUrl(), handleMessage);
+
+  // Live preview (design §5.4) start/stop tracks two things at once: the panel's
+  // own open/closed toggle, and which run (if any) is actually running right now —
+  // there's no browser to preview once a run finishes (runSuite/runAdHoc tear the
+  // Page down as soon as they're done). Switching between the two keeps exactly one
+  // preview:start outstanding at a time, stopping the previous one first.
+  useEffect(() => {
+    const wantRunId = previewOpen && activeRun?.status === "running" ? activeRun.id : null;
+    if (watchedRunIdRef.current === wantRunId) return;
+    if (watchedRunIdRef.current) {
+      send({ type: "preview:stop", runId: watchedRunIdRef.current });
+    }
+    if (wantRunId) {
+      setPreviewFrame(null);
+      setPreviewUrl(null);
+      send({ type: "preview:start", runId: wantRunId });
+    }
+    watchedRunIdRef.current = wantRunId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewOpen, activeRun?.id, activeRun?.status]);
+
+  useEffect(() => {
+    return () => {
+      if (watchedRunIdRef.current) {
+        send({ type: "preview:stop", runId: watchedRunIdRef.current });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function togglePreview(): void {
+    setPreviewOpen((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(PREVIEW_OPEN_KEY, String(next));
+      return next;
+    });
+  }
+
+  function handlePreviewResizeStart(event: React.MouseEvent): void {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = previewWidth;
+
+    function handleMouseMove(moveEvent: MouseEvent): void {
+      const next = Math.min(
+        MAX_PREVIEW_WIDTH,
+        Math.max(MIN_PREVIEW_WIDTH, startWidth - (moveEvent.clientX - startX)),
+      );
+      setPreviewWidth(next);
+    }
+    function handleMouseUp(): void {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      setPreviewWidth((current) => {
+        window.localStorage.setItem(PREVIEW_WIDTH_KEY, String(current));
+        return current;
+      });
+    }
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }
 
   function dismissOnboarding(): void {
     window.localStorage.setItem("sentinel-onboarding-dismissed", "true");
@@ -242,55 +324,85 @@ export function App(): JSX.Element {
               {crumb}
             </span>
           ))}
+          <button
+            type="button"
+            className={`preview-toggle${previewOpen ? " active" : ""}`}
+            onClick={togglePreview}
+            aria-label={previewOpen ? "Hide live preview" : "Show live preview"}
+            aria-pressed={previewOpen}
+          >
+            ▣ Preview
+          </button>
         </div>
 
-        <div className="content-container">
-          {view === "dashboard" && (
-            <DashboardView onGoToProjects={() => setView("projects")} onSelectRecentRun={handleOpenRecentRun} />
-          )}
+        <div className="content-dock">
+          <div className="content-container">
+            {view === "dashboard" && (
+              <DashboardView onGoToProjects={() => setView("projects")} onSelectRecentRun={handleOpenRecentRun} />
+            )}
 
-          {view === "projects" && (
-            <ProjectsView
-              onSelectProject={(selected) => {
-                setProject(selected);
-                setView("suites");
-              }}
-            />
-          )}
+            {view === "projects" && (
+              <ProjectsView
+                onSelectProject={(selected) => {
+                  setProject(selected);
+                  setView("suites");
+                }}
+              />
+            )}
 
-          {view === "suites" && project && (
-            <SuitesView
-              project={project}
-              onBack={() => setView("projects")}
-              onSelectSuite={(selected) => {
-                setSuite(selected);
-                setView("suite-detail");
-              }}
-            />
-          )}
+            {view === "suites" && project && (
+              <SuitesView
+                project={project}
+                onBack={() => setView("projects")}
+                onSelectSuite={(selected) => {
+                  setSuite(selected);
+                  setView("suite-detail");
+                }}
+              />
+            )}
 
-          {view === "suite-detail" && suite && (
-            <SuiteDetailView
-              suite={suite}
-              onBack={() => setView("suites")}
-              onTriggerRun={handleTriggerRun}
-              activeRun={activeRun}
-              activeRunSteps={activeRunSteps}
-              pendingPrompt={pendingPrompt}
-              onAnswerPrompt={handleAnswerPrompt}
-            />
-          )}
+            {view === "suite-detail" && suite && (
+              <SuiteDetailView
+                suite={suite}
+                onBack={() => setView("suites")}
+                onTriggerRun={handleTriggerRun}
+                activeRun={activeRun}
+                activeRunSteps={activeRunSteps}
+                pendingPrompt={pendingPrompt}
+                onAnswerPrompt={handleAnswerPrompt}
+              />
+            )}
 
-          {view === "settings" && <SettingsView />}
+            {view === "settings" && <SettingsView />}
 
-          {view === "adhoc" && (
-            <AdHocView
-              onTriggerRun={handleTriggerAdHocRun}
-              activeRun={activeRun}
-              activeRunSteps={activeRunSteps}
-              pendingPrompt={pendingPrompt}
-              onAnswerPrompt={handleAnswerPrompt}
-            />
+            {view === "adhoc" && (
+              <AdHocView
+                onTriggerRun={handleTriggerAdHocRun}
+                activeRun={activeRun}
+                activeRunSteps={activeRunSteps}
+                pendingPrompt={pendingPrompt}
+                onAnswerPrompt={handleAnswerPrompt}
+              />
+            )}
+          </div>
+
+          {previewOpen && (
+            <>
+              <div
+                className="preview-resize-handle"
+                onMouseDown={handlePreviewResizeStart}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize live preview panel"
+              />
+              <div className="preview-dock-panel" style={{ width: previewWidth }}>
+                <PreviewPanel
+                  active={activeRun?.status === "running"}
+                  frame={previewFrame}
+                  url={previewUrl}
+                />
+              </div>
+            </>
           )}
         </div>
       </main>

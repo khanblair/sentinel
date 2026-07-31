@@ -1,10 +1,13 @@
-import type { ElementSummary, Page } from "./page.js";
+import type { ElementSummary, Page, ScreencastFrame } from "./page.js";
 
 /** Test double for the Page port — no browser involved. Lets automation/executionLoop
  * tests run deterministically and fast, with the real Playwright wiring verified
- * separately (see playwrightPage.e2e.test.ts). */
+ * separately (see playwrightPage.e2e.test.ts). Live-preview methods (screencast/
+ * viewport/element probe) are no-ops here — no automation test exercises the preview
+ * path, that's covered by previewGate.test.ts and playwrightPage.e2e.test.ts instead. */
 export class FakePage implements Page {
   pageTitle = "Fake Page";
+  currentUrl = "https://example.com/";
   readonly calls: Array<{ method: string; args: unknown[] }> = [];
   private readonly textBySelector = new Map<string, string | null>();
   private readonly elements: ElementSummary[] = [];
@@ -57,5 +60,26 @@ export class FakePage implements Page {
 
   async listElements(): Promise<ElementSummary[]> {
     return this.elements;
+  }
+
+  url(): string {
+    return this.currentUrl;
+  }
+
+  async startScreencast(_onFrame: (frame: ScreencastFrame) => void): Promise<void> {
+    this.calls.push({ method: "startScreencast", args: [] });
+  }
+
+  async stopScreencast(): Promise<void> {
+    this.calls.push({ method: "stopScreencast", args: [] });
+  }
+
+  async setViewportSize(width: number, height: number): Promise<void> {
+    this.calls.push({ method: "setViewportSize", args: [width, height] });
+  }
+
+  async describeElementAt(x: number, y: number): Promise<ElementSummary | null> {
+    this.calls.push({ method: "describeElementAt", args: [x, y] });
+    return null;
   }
 }
