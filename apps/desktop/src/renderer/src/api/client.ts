@@ -188,8 +188,11 @@ export const api = {
         steps: string;
         expectedResult: string;
         tags?: string[];
+        linkedIssueUrl?: string | null;
       },
     ) => request<TestCase>(`/api/suites/${suiteId}/test-cases`, { method: "POST", body: JSON.stringify(input) }),
+    update: (id: string, input: { linkedIssueUrl?: string | null }) =>
+      request<TestCase>(`/api/test-cases/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
     archive: (id: string) => request<TestCase>(`/api/test-cases/${id}/archive`, { method: "POST" }),
     clone: (id: string) => request<TestCase>(`/api/test-cases/${id}/clone`, { method: "POST" }),
     importCsv: (suiteId: string, csv: string) =>

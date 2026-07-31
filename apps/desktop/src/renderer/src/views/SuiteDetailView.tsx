@@ -36,8 +36,12 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
   const [steps, setSteps] = useState("");
   const [expectedResult, setExpectedResult] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+  const [linkedIssueUrlInput, setLinkedIssueUrlInput] = useState("");
 
   const [activeTagFilters, setActiveTagFilters] = useState<string[]>([]);
+
+  const [editingLinkedIssueId, setEditingLinkedIssueId] = useState<string | null>(null);
+  const [editingLinkedIssueValue, setEditingLinkedIssueValue] = useState("");
 
   const [importSummary, setImportSummary] = useState<{
     imported: number;
@@ -90,11 +94,13 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
         steps,
         expectedResult,
         tags: tags.length > 0 ? tags : undefined,
+        linkedIssueUrl: linkedIssueUrlInput.trim() || undefined,
       });
       setTitle("");
       setSteps("");
       setExpectedResult("");
       setTagsInput("");
+      setLinkedIssueUrlInput("");
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -132,6 +138,21 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
   async function handleCloneTestCase(id: string): Promise<void> {
     try {
       await api.testCases.clone(id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function startEditingLinkedIssue(testCase: TestCase): void {
+    setEditingLinkedIssueId(testCase.id);
+    setEditingLinkedIssueValue(testCase.linkedIssueUrl ?? "");
+  }
+
+  async function saveLinkedIssue(id: string): Promise<void> {
+    try {
+      await api.testCases.update(id, { linkedIssueUrl: editingLinkedIssueValue.trim() || null });
+      setEditingLinkedIssueId(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -200,6 +221,35 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
                 {testCase.urlPath}
                 {testCase.tags.length > 0 && ` · ${testCase.tags.join(", ")}`}
               </span>
+              {editingLinkedIssueId === testCase.id ? (
+                <div className="field-row">
+                  <input
+                    value={editingLinkedIssueValue}
+                    onChange={(e) => setEditingLinkedIssueValue(e.target.value)}
+                    placeholder="https://github.com/org/repo/issues/123"
+                    aria-label={`Linked issue URL for ${testCase.title}`}
+                  />
+                  <button type="button" className="btn btn-sm" onClick={() => void saveLinkedIssue(testCase.id)}>
+                    Save
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => setEditingLinkedIssueId(null)}>
+                    Cancel
+                  </button>
+                </div>
+              ) : testCase.linkedIssueUrl ? (
+                <div className="field-row">
+                  <a href={testCase.linkedIssueUrl} target="_blank" rel="noopener noreferrer" className="item-subtext">
+                    🔗 {testCase.linkedIssueUrl}
+                  </a>
+                  <button type="button" className="btn btn-sm" onClick={() => startEditingLinkedIssue(testCase)}>
+                    Edit link
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="btn btn-sm" onClick={() => startEditingLinkedIssue(testCase)}>
+                  Link issue
+                </button>
+              )}
             </div>
             <div className="field-row">
               <button type="button" className="btn btn-sm" onClick={() => void handleCloneTestCase(testCase.id)}>
@@ -236,6 +286,12 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
           onChange={(e) => setTagsInput(e.target.value)}
           placeholder="Tags (comma-separated, e.g. smoke, regression)"
           aria-label="Tags"
+        />
+        <input
+          value={linkedIssueUrlInput}
+          onChange={(e) => setLinkedIssueUrlInput(e.target.value)}
+          placeholder="Linked issue URL (optional)"
+          aria-label="Linked issue URL"
         />
         <button type="submit" className="btn btn-primary">
           Add test case
