@@ -13,6 +13,16 @@ import type {
   ProviderAdapter,
 } from "./types.js";
 
+/** True for the specific failure where a provider rejects a forced tool-call because
+ * the target model is always-reasoning (e.g. DeepSeek's reasoner-class models, OpenAI's
+ * o-series): generateObject's default 'auto' mode picks 'tool' mode for OpenAI-compatible
+ * models, which these reject outright. Narrow on purpose — anything else (auth, rate
+ * limit, network) should fail immediately rather than silently retrying. */
+function isToolChoiceIncompatibleError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return message.includes("tool_choice") && (message.includes("thinking") || message.includes("reasoning"));
+}
+
 // Vercel AI SDK gives Claude/OpenAI/Gemini native adapters, and covers DeepSeek/OpenRouter
 // through @ai-sdk/openai's OpenAI-compatible mode — one client shape for all five providers
 // instead of a hand-rolled HTTP client per provider (design §7).
@@ -63,19 +73,39 @@ export function createProviderAdapter(provider: Provider, apiKey: string, model:
     async generateObject<Schema extends z.ZodTypeAny>(
       request: GenerateObjectRequest<Schema>,
     ): Promise<GenerateObjectResult<z.infer<Schema>>> {
-      const result = await generateObject({
-        model: languageModel,
-        system: request.systemPrompt,
-        prompt: request.prompt,
-        schema: request.schema,
-      });
-      return {
-        object: result.object,
-        usage: {
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-        },
-      };
+      async function run(mode?: "json") {
+        const result = await generateObject({
+          model: languageModel,
+          system: request.systemPrompt,
+          prompt: request.prompt,
+          schema: request.schema,
+          mode,
+        });
+        return {
+          object: result.object,
+          usage: {
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+          },
+        };
+      }
+
+      try {
+        return await run();
+      } catch (error) {
+        if (!isToolChoiceIncompatibleError(error)) {
+          throw error;
+        }
+        // 'auto' mode picked forced tool-calling, which this always-reasoning model
+        // rejects. Retry once with prompt-injected JSON mode instead of a tool call.
+        try {
+          return await run("json");
+        } catch {
+          throw new ValidationError(
+            `Model "${model}" (${provider}) does not support structured output — it rejects forced tool calls (likely an always-reasoning model) and the JSON-mode fallback also failed. Pick a different model.`,
+          );
+        }
+      }
     },
   };
 }
