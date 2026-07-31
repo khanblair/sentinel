@@ -183,3 +183,37 @@ This mirrors Testify's existing shape (`RunSummary` / `TestCaseResult` / `StepLo
 - The exact Assistant/Skill markdown file format (to be nailed down in the implementation plan, following AionUi's `assistant/*.md` pattern as a starting reference).
 - Multi-user auth/roles (irrelevant until the team-sharing phase in §10 is prioritized).
 - Detailed build/implementation sequencing (belongs to the implementation plan, not this design spec).
+
+## 12. Implementation status (as of this pass)
+
+Everything in §5 is built except the two items below. Both were deliberately cut
+rather than half-built, after the rest of §5 (test management, ad-hoc chat testing,
+execution engine, Assistants, Rules, scheduling, provider management, analytics, and
+reporting including XLSX) shipped in full, along with §10's project export/import
+bundle and a `TestCase.linkedIssueUrl` field (store-and-render only, no issue-tracker
+API integration — see below).
+
+- **§5.4 Live preview.** Not built. This needs a CDP screencast channel streamed from
+  the backend's Playwright session into the Electron renderer — infrastructure that
+  doesn't exist yet on either side (no screencast plumbing in the backend, no preview
+  pane in the renderer) — and it can't be verified in this environment: every
+  automated check in this codebase runs against `FakePageFactory`/`FakePage` in tests
+  or a real Playwright browser driven headlessly by a verification script, never a
+  full Electron window. Shipping an unverifiable streaming feature was judged worse
+  than not shipping it. Revisit with a real Electron smoke-test environment available.
+- **§5.6 `visual-diff` Skill.** The Skill row is seeded (`seedSkills.ts`) and
+  selectable on Assistants, but nothing executes it — Skills in general are currently
+  a name registry only; none of them (built-in or custom) are folded into the actual
+  system prompt or given real tool implementations in the action loop (the same class
+  of gap that Assistant persona + Rules had until this pass fixed *that* one — see
+  `orchestrator/systemPrompt.ts`). Building real visual diffing needs, at minimum: a
+  `Page.screenshot()` method (`automation/page.ts` has none today), a baseline-image
+  storage model, a new tool-call type the LLM can invoke, and Skills becoming real
+  enough to gate which tools are available. That's a subsystem, not an increment —
+  deferred as its own future pass rather than partially wired in.
+- **Linked issue field**, by contrast, *is* built — but only the minimum §5.1 implies:
+  a user pastes a URL into `linkedIssueUrl` and it renders as a link. There is no
+  GitHub/Linear/Jira push integration (filing or updating a real issue from a failed
+  test case) — there's nowhere in the current data model to hold per-provider issue
+  tracker auth (`ProviderConfig` is specifically for AI provider keys), and building
+  that is a distinct, larger feature.
