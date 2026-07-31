@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestPrismaClient, resetDb, seedAssistant } from "../test/testDb.js";
 import { WsPromptBroker } from "../ws/promptBroker.js";
 import { buildApp } from "./app.js";
@@ -105,6 +105,34 @@ describe("HTTP API", () => {
   it("testing a provider config that doesn't exist returns 404, not a 500 or a network call", async () => {
     const response = await app.inject({ method: "POST", url: "/api/provider-configs/does-not-exist/test" });
     expect(response.statusCode).toBe(404);
+  });
+
+  it("listing models for a provider config that doesn't exist returns 404, not a 500 or a network call", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/provider-configs/does-not-exist/models" });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("listing models never leaks a raw provider error body when the provider rejects the key", async () => {
+    const providerConfig = await app.inject({
+      method: "POST",
+      url: "/api/provider-configs",
+      payload: { provider: "openai", apiKey: "sk-super-secret-test-key" },
+    });
+    const { id } = JSON.parse(providerConfig.payload) as { id: string };
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: () => Promise.resolve('{"error":"Incorrect API key: sk-super-secret-test-key"}'),
+      } as Response);
+
+    const response = await app.inject({ method: "GET", url: `/api/provider-configs/${id}/models` });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.payload).not.toContain("sk-super-secret-test-key");
+    fetchSpy.mockRestore();
   });
 
   it("triggering a run rejects an invalid mode with 400, not a 500", async () => {

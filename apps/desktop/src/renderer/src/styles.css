@@ -396,6 +396,14 @@ ul {
   margin-bottom: 10px;
 }
 
+/* A tight vertical stack (e.g. a select + its helper text) sized to sit inline
+   inside a .field-row alongside other controls, unlike .field-stack's full-form width. */
+.field-stack-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 input[type="text"],
 input[type="password"],
 input:not([type]),

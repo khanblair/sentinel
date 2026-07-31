@@ -1,4 +1,15 @@
-import type { Environment, Project, Provider, Rule, RunMode, ScheduleType, Skill, Suite, TestCase } from "@sentinel/shared";
+import type {
+  Environment,
+  ModelInfo,
+  Project,
+  Provider,
+  Rule,
+  RunMode,
+  ScheduleType,
+  Skill,
+  Suite,
+  TestCase,
+} from "@sentinel/shared";
 
 const FALLBACK_BACKEND_URL = "http://127.0.0.1:4317";
 
@@ -229,6 +240,7 @@ export const api = {
       request<ProviderConfigSummary>("/api/provider-configs", { method: "POST", body: JSON.stringify(input) }),
     remove: (id: string) => request<void>(`/api/provider-configs/${id}`, { method: "DELETE" }),
     test: (id: string) => request<{ ok: boolean; message: string }>(`/api/provider-configs/${id}/test`, { method: "POST" }),
+    listModels: (id: string) => request<ModelInfo[]>(`/api/provider-configs/${id}/models`),
   },
   scheduledJobs: {
     listBySuite: (suiteId: string) => request<ScheduledJob[]>(`/api/suites/${suiteId}/scheduled-jobs`),

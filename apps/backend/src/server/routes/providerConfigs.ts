@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { Provider } from "@sentinel/shared";
+import type { ModelInfo, Provider } from "@sentinel/shared";
 import type { ProviderConfigRepository } from "../../db/repositories/providerConfigRepository.js";
 import { NotFoundError } from "../../errors.js";
 import { createProviderAdapter } from "../../providers/aiSdkProvider.js";
+import { listModels } from "../../providers/listModels.js";
 import { sendErrorResponse } from "./helpers.js";
 
 const createSchema = z.object({
@@ -39,7 +40,15 @@ export function describeConnectionFailure(error: unknown): string {
   return "Connection failed — the provider rejected the request.";
 }
 
+const MODEL_LIST_TTL_MS = 60 * 60 * 1000; // model lists don't change minute to minute
+
 export function registerProviderConfigRoutes(app: FastifyInstance, repo: ProviderConfigRepository): void {
+  // Scoped to this app instance (not a module-level singleton) so tests that build
+  // separate apps never leak cached models between them. Cleared for an id whenever
+  // that config is deleted, so a re-added key with a recycled row id can't read stale
+  // models from a config it has nothing to do with.
+  const modelListCache = new Map<string, { fetchedAt: number; models: ModelInfo[] }>();
+
   app.post("/api/provider-configs", async (request, reply) => {
     const parsed = createSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -57,9 +66,34 @@ export function registerProviderConfigRoutes(app: FastifyInstance, repo: Provide
   app.delete<{ Params: { id: string } }>("/api/provider-configs/:id", async (request, reply) => {
     try {
       await repo.delete(request.params.id);
+      modelListCache.delete(request.params.id);
       return reply.status(204).send();
     } catch (error) {
       return sendErrorResponse(reply, error);
+    }
+  });
+
+  /** Backs the model dropdown on run-trigger forms — always the provider's own live
+   * list, never a hardcoded one (see listModels.ts). Cached briefly per config since
+   * a form re-render shouldn't re-hit the provider's API on every keystroke. */
+  app.get<{ Params: { id: string } }>("/api/provider-configs/:id/models", async (request, reply) => {
+    try {
+      const cached = modelListCache.get(request.params.id);
+      if (cached && Date.now() - cached.fetchedAt < MODEL_LIST_TTL_MS) {
+        return reply.send(cached.models);
+      }
+      const { provider, apiKey } = await repo.getDecryptedApiKey(request.params.id);
+      const models = await listModels(provider, apiKey);
+      modelListCache.set(request.params.id, { fetchedAt: Date.now(), models });
+      return reply.send(models);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return sendErrorResponse(reply, error);
+      }
+      // Never let a raw provider error body reach the client — reuses the same
+      // bucketing describeConnectionFailure applies to "test connection" (401 bodies
+      // can echo request details back).
+      return reply.status(502).send({ status: "error", message: describeConnectionFailure(error) });
     }
   });
 

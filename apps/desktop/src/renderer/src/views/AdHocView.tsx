@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Run, RunMode, StepLog } from "@sentinel/shared";
 import { api, type AssistantSummary, type ProviderConfigSummary } from "../api/client";
 import { RunTicker, type PendingPrompt } from "../components/RunTicker";
+import { ModelSelect } from "../components/ModelSelect";
 
 export interface AdHocViewProps {
   onTriggerRun: (input: {
@@ -137,7 +138,10 @@ export function AdHocView({
             </select>
             <select
               value={providerConfigId}
-              onChange={(e) => setProviderConfigId(e.target.value)}
+              onChange={(e) => {
+                setProviderConfigId(e.target.value);
+                setModel("");
+              }}
               aria-label="Provider config"
             >
               <option value="">Select a provider…</option>
@@ -147,7 +151,7 @@ export function AdHocView({
                 </option>
               ))}
             </select>
-            <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model" aria-label="Model" />
+            <ModelSelect providerConfigId={providerConfigId} value={model} onChange={setModel} />
             <select value={mode} onChange={(e) => setMode(e.target.value as RunMode)} aria-label="Run mode">
               <option value="interactive">Interactive</option>
               <option value="full_auto">Full-Auto</option>

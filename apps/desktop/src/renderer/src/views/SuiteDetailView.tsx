@@ -5,6 +5,7 @@ import { RunTicker, type PendingPrompt } from "../components/RunTicker";
 import { RunHistoryPanel } from "../components/RunHistoryPanel";
 import { AnalyticsPanel } from "../components/AnalyticsPanel";
 import { ScheduledJobsPanel } from "../components/ScheduledJobsPanel";
+import { ModelSelect } from "../components/ModelSelect";
 
 export interface SuiteDetailViewProps {
   suite: Suite;
@@ -347,7 +348,10 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
         </select>
         <select
           value={providerConfigId}
-          onChange={(e) => setProviderConfigId(e.target.value)}
+          onChange={(e) => {
+            setProviderConfigId(e.target.value);
+            setModel("");
+          }}
           aria-label="Provider config"
         >
           <option value="">Select a provider…</option>
@@ -357,7 +361,7 @@ export function SuiteDetailView(props: SuiteDetailViewProps): JSX.Element {
             </option>
           ))}
         </select>
-        <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model" aria-label="Model" />
+        <ModelSelect providerConfigId={providerConfigId} value={model} onChange={setModel} />
         <select value={mode} onChange={(e) => setMode(e.target.value as RunMode)} aria-label="Run mode">
           <option value="interactive">Interactive</option>
           <option value="full_auto">Full-Auto</option>

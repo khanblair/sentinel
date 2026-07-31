@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Environment, RunMode, ScheduleType } from "@sentinel/shared";
 import { api, type AssistantSummary, type ProviderConfigSummary, type ScheduledJob } from "../api/client";
+import { ModelSelect } from "./ModelSelect";
 
 export interface ScheduledJobsPanelProps {
   suiteId: string;
@@ -146,7 +147,14 @@ export function ScheduledJobsPanel({
             </option>
           ))}
         </select>
-        <select value={providerConfigId} onChange={(e) => setProviderConfigId(e.target.value)} aria-label="Provider config">
+        <select
+          value={providerConfigId}
+          onChange={(e) => {
+            setProviderConfigId(e.target.value);
+            setModel("");
+          }}
+          aria-label="Provider config"
+        >
           <option value="">Select a provider…</option>
           {providerConfigs.map((config) => (
             <option key={config.id} value={config.id}>
@@ -154,7 +162,7 @@ export function ScheduledJobsPanel({
             </option>
           ))}
         </select>
-        <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model" aria-label="Model" />
+        <ModelSelect providerConfigId={providerConfigId} value={model} onChange={setModel} />
         <select value={mode} onChange={(e) => setMode(e.target.value as RunMode)} aria-label="Run mode">
           <option value="full_auto">Full-Auto</option>
           <option value="interactive">Interactive</option>

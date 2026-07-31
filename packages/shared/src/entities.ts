@@ -18,6 +18,21 @@ export type StepVerdict = "pass" | "fail" | "blocked";
 
 export type ScheduleType = "cron" | "interval" | "once";
 
+/**
+ * A model available from a provider, fetched live from that provider's own API
+ * (never hardcoded — model IDs and availability change too often to bake in).
+ * Fields beyond `id` are populated only when the provider's list-models response
+ * actually includes them — never synthesized. A provider that returns bare IDs
+ * (OpenAI, DeepSeek) legitimately has every field but `id` as `null`.
+ */
+export interface ModelInfo {
+  id: string;
+  label: string | null;
+  description: string | null;
+  contextWindow: number | null;
+  supportsTools: boolean | null;
+}
+
 export interface Project {
   id: string;
   name: string;
