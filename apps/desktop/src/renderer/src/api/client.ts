@@ -243,6 +243,14 @@ export const api = {
       }
       return response.text();
     },
+    reportXlsx: async (runId: string): Promise<Blob> => {
+      const response = await fetch(`${backendHttpUrl()}/api/runs/${runId}/report?format=xlsx`);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as ApiErrorBody;
+        throw new Error(body.message ?? `Request failed with status ${response.status}`);
+      }
+      return response.blob();
+    },
   },
   analytics: {
     trend: (suiteId: string) => request<RunTrendPoint[]>(`/api/suites/${suiteId}/analytics/trend`),

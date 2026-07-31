@@ -5,13 +5,14 @@ import type { StepVerdict } from "@sentinel/shared";
 import { buildReportRows, type ReportStepLog, type ReportTestCase } from "../../reports/buildReportRows.js";
 import { formatCsv } from "../../reports/formatCsv.js";
 import { formatMarkdown } from "../../reports/formatMarkdown.js";
+import { formatXlsx } from "../../reports/formatXlsx.js";
 import { NotFoundError, ValidationError } from "../../errors.js";
 import { sendErrorResponse } from "./helpers.js";
 
-const querySchema = z.object({ format: z.enum(["markdown", "csv"]).default("markdown") });
+const querySchema = z.object({ format: z.enum(["markdown", "csv", "xlsx"]).default("markdown") });
 
-/** Exports a finished Run as the QA-template report (design §5.11): Markdown or
- * CSV, one row per Test Case. XLSX export is deferred — not built in this pass. */
+/** Exports a finished Run as the QA-template report (design §5.11): Markdown, CSV,
+ * or XLSX, one row per Test Case. */
 export function registerReportRoutes(app: FastifyInstance, prisma: PrismaClient): void {
   app.get<{ Params: { id: string }; Querystring: { format?: string } }>(
     "/api/runs/:id/report",
@@ -65,6 +66,14 @@ export function registerReportRoutes(app: FastifyInstance, prisma: PrismaClient)
         if (parsed.data.format === "csv") {
           void reply.header("Content-Type", "text/csv; charset=utf-8");
           return reply.send(formatCsv(rows));
+        }
+        if (parsed.data.format === "xlsx") {
+          void reply.header(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          );
+          void reply.header("Content-Disposition", `attachment; filename="run-${run.id.slice(0, 8)}-report.xlsx"`);
+          return reply.send(await formatXlsx(rows));
         }
         void reply.header("Content-Type", "text/markdown; charset=utf-8");
         return reply.send(formatMarkdown(rows));

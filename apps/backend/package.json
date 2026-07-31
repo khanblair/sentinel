@@ -28,6 +28,7 @@
     "@sentinel/shared": "workspace:*",
     "ai": "^4.0.18",
     "cron-parser": "^4.9.0",
+    "exceljs": "^4.4.0",
     "fastify": "^4.28.1",
     "playwright": "^1.48.0",
     "ws": "^8.18.0",

@@ -117,6 +117,21 @@ export function RunHistoryPanel({ suiteId }: RunHistoryPanelProps): JSX.Element 
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }
 
+  function downloadReportXlsx(): void {
+    if (!selectedRunId) return;
+    api.runs
+      .reportXlsx(selectedRunId)
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `run-${selectedRunId.slice(0, 8)}-report.xlsx`;
+        link.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  }
+
   return (
     <>
       <h3>Run history</h3>
@@ -224,6 +239,9 @@ export function RunHistoryPanel({ suiteId }: RunHistoryPanelProps): JSX.Element 
                   </button>
                   <button type="button" className="btn btn-sm" onClick={() => downloadReport("csv")}>
                     Download .csv
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={downloadReportXlsx}>
+                    Download .xlsx
                   </button>
                 </div>
               )}
